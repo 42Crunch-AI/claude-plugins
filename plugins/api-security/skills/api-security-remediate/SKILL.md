@@ -1,5 +1,4 @@
 ---
-name: api-security-remediate
 description: >
   End-to-end 42Crunch API security hardening: run the audit tool (`42c-ast`) on an
   OpenAPI spec and iteratively fix all flagged issues until the security score reaches

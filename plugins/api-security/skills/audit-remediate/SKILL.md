@@ -1,5 +1,4 @@
 ---
-name: audit-remediate
 description: >
   Run the 42Crunch audit tool (`42c-ast`) on an OpenAPI spec and iteratively fix all
   flagged issues until the security score reaches 100/100. Does NOT run a conformance

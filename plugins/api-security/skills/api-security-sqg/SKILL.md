@@ -1,5 +1,4 @@
 ---
-name: api-security-sqg
 description: >
   SQG-targeted 42Crunch API security hardening: run the audit tool (`42c-ast`) with platform
   credentials and fix only the issues that block SQG (Security Quality Gate) acceptance, then

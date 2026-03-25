@@ -1,5 +1,4 @@
 ---
-name: 42crunch
 description: >
   42Crunch API security: audit an OpenAPI spec with platform credentials, show a full
   report summary, fix all SQG-blocking issues, then run a conformance scan and fix

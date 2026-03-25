@@ -1,5 +1,4 @@
 ---
-name: scan-remediate
 description: >
   Run a 42Crunch conformance scan against a live API and fix implementation
   vulnerabilities found in source code (BOLA, BFLA, missing validation, wrong
