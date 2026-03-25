@@ -1,4 +1,5 @@
 ---
+name: 42crunch
 description: >
   42Crunch API security: audit an OpenAPI spec with platform credentials, show a full
   report summary, fix all SQG-blocking issues, then run a conformance scan and fix
@@ -18,7 +19,7 @@ description: >
   audit-only to 100/100 (use audit-remediate), scan-only (use scan-remediate),
   generating or converting OpenAPI specs, or tasks unrelated to 42Crunch security tooling.
 disable-model-invocation: true
-argument-hint: "[oas-file-path] [api-base-url]"
+argument-hint: <oas-file-path> [api-base-url]
 ---
 
 # 42Crunch Skill
