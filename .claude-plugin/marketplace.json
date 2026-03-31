@@ -1,25 +1,24 @@
 {
-  "name": "claude-plugin",
+  "name": "42crunch-marketplace",
   "owner": {
     "name": "42Crunch",
     "email": "support@42crunch.com"
   },
   "metadata": {
-    "description": "42Crunch Marketplace for Claude Code Plugin",
-    "version": "1.0.0"
+    "description": "42Crunch Marketplace for Claude Code Plugin"
   },
   "plugins": [
     {
-      "name": "api-security",
+      "name": "api-security-automation",
       "source": "./plugins/api-security",
-      "description": "42Crunch automated OpenAPI Security Audit, API Vulnerability Scan (BOLA/BFLA), and AI-powered code remediation. Complete audit→scan→fix→validate feedback loop workflow for deployment-ready APIs with 100% Enterprise security compliance to governance guardrails.",
+      "description": "Automate API security directly in Claude Code with 42Crunch - automatically audit OpenAPI specs, detect vulnerabilities (including BOLA/BFLA), and apply AI-powered fixes. Designed for AI-assisted development workflows, it provides continuous guardrails through an audit->scan->remediate->validate loop, ensuring APIs meet enterprise security standards before deployment.",
       "version": "1.0.0",
       "author": {
         "name": "42Crunch",
         "email": "support@42crunch.com"
       },
       "category": "security",
-      "keywords": ["openapi", "security", "api", "audit", "scan", "remediation", "42crunch"]
+      "keywords": ["openapi", "api-security", "audit", "scan", "remediation", "vulnerability", "owasp", "bola", "bfla", "ai", "devsecops", "42crunch"]
     }
   ]
 }
