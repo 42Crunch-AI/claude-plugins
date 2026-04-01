@@ -1,4 +1,5 @@
 ---
+name: 42crunch-audit
 description: >
   Run a 42Crunch API Security Audit and fix SQG-blocking issues in an OpenAPI
   Specification file. Use this skill whenever the user wants to audit an OAS
@@ -28,31 +29,25 @@ Does **not** run a live scan — use the `42crunch-scan` skill for that.
 
 3. **Credential check** — run silently.
    Token format rules: platform API tokens start with `api_`; platform IDE
-   tokens start with `ide_`; freemium tokens have neither prefix.
+   tokens start with `ide_`; freemium tokens are Base64 strings with neither
+   prefix.
 
    Check in this order (environment first, then walk upward from the OAS
    directory checking `.env` files, stopping at the repository root):
 
-   a. **`API_KEY`** — if found:
-      - Value starts with `api_` or `ide_` → **Platform mode**. Store the
-        value as `API_KEY` and `PLATFORM_HOST` (default
-        `https://demolabs.42crunch.cloud`). Proceed silently.
-      - Other format → stop: "API_KEY looks like a freemium token. Use
-        `FREEMIUM_TOKEN` for freemium credentials."
+   a. **`API_KEY`** — if found, detect mode from the value:
+      - Starts with `api_` → **Platform mode** (API token). Set `PLATFORM_HOST`
+        (default `https://demolabs.42crunch.cloud`). Proceed silently.
+      - Starts with `ide_` → **Platform mode** (IDE token). Same command
+        behavior as `api_`. Proceed silently.
+      - Neither prefix (Base64 string) → **Freemium mode**. Use
+        `--token <API_KEY>` and `PLATFORM_HOST="https://platform.42crunch.com"`
+        in all commands. Proceed silently.
 
-   b. **`IDE_TOKEN`** — if `API_KEY` not found and `IDE_TOKEN` starts with
-      `ide_` → **Platform mode**. Use the value as `API_KEY` in all
-      subsequent commands.
-
-   c. **`FREEMIUM_TOKEN`** — if neither platform credential found:
-      - If found → **Freemium mode**. Use `--token <FREEMIUM_TOKEN>` and
-        `PLATFORM_HOST="https://platform.42crunch.com"` in all commands.
-        Proceed silently.
-
-   d. **Nothing found** → stop: "No credential found. Set `API_KEY` (starts
-      with `api_`) or `IDE_TOKEN` (starts with `ide_`) for platform access,
-      or `FREEMIUM_TOKEN` for freemium access. Place in your environment or
-      a `.env` file and re-run."
+   b. **Nothing found** → stop: "No credential found. Set `API_KEY` to your
+      42Crunch token — `api_*` for a platform API token, `ide_*` for an IDE
+      token, or a Base64 string for freemium access. Place it in your
+      environment or a `.env` file and re-run."
 
 4. **Tag detection** — platform mode only. Run silently. Read
    `references/tag-detection.md`. In freemium mode, skip tag detection
@@ -115,13 +110,11 @@ If the user declined to apply fixes, note that instead.
 
 ## Environment Variables
 
-| Variable          | Mode      | Purpose                                                       | Default                            |
-|-------------------|-----------|---------------------------------------------------------------|------------------------------------|
-| `API_KEY`         | Platform  | 42Crunch platform API key (starts with `api_`)                | —                                  |
-| `IDE_TOKEN`       | Platform  | 42Crunch IDE token (starts with `ide_`), used as API_KEY      | —                                  |
-| `PLATFORM_HOST`   | Platform  | Platform base URL                                             | `https://<your-platform-host>`     |
-| `FREEMIUM_TOKEN`  | Freemium  | Freemium token, passed via `--token` flag                     | —                                  |
+| Variable          | Mode              | Purpose                                                                                                 | Default                            |
+|-------------------|-------------------|---------------------------------------------------------------------------------------------------------|------------------------------------|
+| `API_KEY`         | Platform/Freemium | Token determines mode: `api_*` = platform API, `ide_*` = platform IDE, Base64 = freemium (`--token`)   | —                                  |
+| `PLATFORM_HOST`   | Platform          | Platform base URL                                                                                       | `https://demolabs.42crunch.cloud`  |
 
 **Platform mode**: `API_KEY` and `PLATFORM_HOST` set for every command. `--tag` and `--report-sqg` applied when a tag is resolved.
 
-**Freemium mode**: `PLATFORM_HOST=https://platform.42crunch.com` and `--token <FREEMIUM_TOKEN>` used for every command. No `--tag` or `--report-sqg`. Hardcoded SQG: score ≥ 70, issues with criticality ≥ MEDIUM are blocking.
+**Freemium mode**: `PLATFORM_HOST=https://platform.42crunch.com` and `--token <API_KEY>` used for every command. No `--tag` or `--report-sqg`. Hardcoded SQG: score ≥ 70, issues with criticality ≥ MEDIUM are blocking.
