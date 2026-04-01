@@ -41,7 +41,7 @@ Does **not** run a live scan — use the `42crunch-scan` skill for that.
       - Starts with `ide_` → **Platform mode** (IDE token). Same command
         behavior as `api_`. Proceed silently.
       - Neither prefix (Base64 string) → **Freemium mode**. Use
-        `--token <API_KEY>` and `PLATFORM_HOST="https://platform.42crunch.com"`
+        `--freemium-host stateless.42crunch.com:443` and `--token <API_KEY>`
         in all commands. Proceed silently.
 
    b. **Nothing found** → stop: "No credential found. Set `API_KEY` to your
@@ -117,4 +117,4 @@ If the user declined to apply fixes, note that instead.
 
 **Platform mode**: `API_KEY` and `PLATFORM_HOST` set for every command. `--tag` and `--report-sqg` applied when a tag is resolved.
 
-**Freemium mode**: `PLATFORM_HOST=https://platform.42crunch.com` and `--token <API_KEY>` used for every command. No `--tag` or `--report-sqg`. Hardcoded SQG: score ≥ 70, issues with criticality ≥ MEDIUM are blocking.
+**Freemium mode**: `--freemium-host stateless.42crunch.com:443` and `--token <API_KEY>` used for every command. No `--tag` or `--report-sqg`. Hardcoded SQG: score ≥ 70, issues with criticality ≥ MEDIUM are blocking.

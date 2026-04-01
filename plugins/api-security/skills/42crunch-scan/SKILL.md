@@ -46,7 +46,7 @@ running `42crunch-audit` first.
       - Starts with `ide_` → **Platform mode** (IDE token). Same command
         behavior as `api_`. Proceed silently.
       - Neither prefix (Base64 string) → **Freemium mode**. Use
-        `--token <API_KEY>` and `PLATFORM_HOST="https://platform.42crunch.com"`
+        `--freemium-host stateless.42crunch.com:443` and `--token <API_KEY>`
         in all commands. Proceed silently.
 
    b. **Nothing found** → stop: "No credential found. Set `API_KEY` to your
@@ -121,4 +121,4 @@ If the user declined to apply fixes or no issues were found, note that instead.
 
 **Platform mode**: `API_KEY` and `PLATFORM_HOST` set for every command. `--tag` applied when a tag is resolved. SQG enforced from platform.
 
-**Freemium mode**: `PLATFORM_HOST=https://platform.42crunch.com` and `--token <API_KEY>` used for every command. No `--tag`. No scan SQG enforcement — present all findings informally.
+**Freemium mode**: `--freemium-host stateless.42crunch.com:443` and `--token <API_KEY>` used for every command. No `--tag`. No scan SQG enforcement — present all findings informally.

@@ -43,7 +43,7 @@ explicit user permission before execution.
       - Starts with `ide_` → **Platform mode** (IDE token). Same command
         behavior as `api_`. Proceed silently.
       - Neither prefix (Base64 string) → **Freemium mode**. Use
-        `--token <API_KEY>` and `PLATFORM_HOST="https://platform.42crunch.com"`
+        `--freemium-host stateless.42crunch.com:443` and `--token <API_KEY>`
         in all commands. Proceed silently.
 
    b. **Nothing found** → stop: "No credential found. Set `API_KEY` to your
@@ -141,4 +141,4 @@ If a phase was skipped (user declined), note that instead of its results.
 
 **Platform mode**: `API_KEY` and `PLATFORM_HOST` are set for every command. `--tag` and `--report-sqg` are applied when a tag is resolved.
 
-**Freemium mode**: `PLATFORM_HOST=https://platform.42crunch.com` and `--token <API_KEY>` are used for every command. No `--tag` or `--report-sqg`.
+**Freemium mode**: `--freemium-host stateless.42crunch.com:443` and `--token <API_KEY>` are used for every command. No `--tag` or `--report-sqg`.

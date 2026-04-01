@@ -3,7 +3,7 @@
 > **Command conventions used throughout this file**
 > - `<binary>` — the full path resolved during binary discovery (e.g. `~/.42crunch/bin/42c-ast`). Never call `42c-ast` by name alone unless it is confirmed to be on PATH.
 > - **Platform mode**: prefix every command with `API_KEY="<resolved-value>" PLATFORM_HOST="<value>"` (omit `PLATFORM_HOST` to use the value from your environment or `.env` file).
-> - **Freemium mode**: prefix every command with `PLATFORM_HOST="https://platform.42crunch.com"` and append `--token <FREEMIUM_TOKEN>`.
+> - **Freemium mode**: add `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>` to every command.
 > - **Score tracking**: record `initial_score`, `initial_sec_score`, and `initial_data_score` immediately after the first parse (Step 2). These are used to build the before/after comparison in the final summary.
 
 ---
@@ -24,7 +24,8 @@ API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
 ### Freemium mode
 
 ```bash
-PLATFORM_HOST="https://platform.42crunch.com" <binary> audit run \
+<binary> audit run \
+  --freemium-host stateless.42crunch.com:443 \
   --token <FREEMIUM_TOKEN> \
   --output /tmp/42c-audit/report.json \
   --output-format json \
