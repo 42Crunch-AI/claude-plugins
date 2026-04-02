@@ -251,9 +251,9 @@ API_KEY=<API_KEY_VALUE>
 - **Windows (PowerShell):**
   ```powershell
   @"
-PLATFORM_HOST=<PLATFORM_HOST_VALUE>
-API_KEY=<API_KEY_VALUE>
-"@ | Set-Content -Path "$env:APPDATA\42Crunch\conf\env" -Encoding UTF8
+  PLATFORM_HOST=<PLATFORM_HOST_VALUE>
+  API_KEY=<API_KEY_VALUE>
+  "@ | Set-Content -Path "$env:APPDATA\42Crunch\conf\env" -Encoding UTF8
   ```
 
 Do **not** quote the values in the env file — write them as bare strings after
