@@ -34,33 +34,22 @@ explicit user permission before execution.
    Do not proceed if setup fails.
 
 3. **Credential check** — run silently.
-   Token format rules: platform API tokens start with `api_`; platform IDE
-   tokens start with `ide_`; freemium tokens are Base64 strings with neither
-   prefix.
 
-   Check in this order (environment first, then walk upward from the OAS
-   directory checking `.env` files, stopping at the repository root, then the
-   global config written by `42crunch-setup-v2`):
+   Read `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env`
+   (Windows) — the config written by `42crunch-setup-v2`:
 
-   a. **`API_KEY`** — if found, detect mode from the value:
-      - Starts with `api_` → **Platform mode** (API token). Set `PLATFORM_HOST`
-        (default `https://demolabs.42crunch.cloud`). Proceed silently.
-      - Starts with `ide_` → **Platform mode** (IDE token). Same command
-        behavior as `api_`. Proceed silently.
-      - Neither prefix (Base64 string) → **Freemium mode**. Use
-        `--freemium-host stateless.42crunch.com:443` and `--token <API_KEY>`
-        in all commands. Proceed silently.
+   ```bash
+   grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
+   ```
 
-   b. **Nothing found in environment or `.env` walk-up** → check
-      `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env`
-      (Windows) — the global config written by `42crunch-setup-v2`. Read
-      `API_KEY` and `PLATFORM_HOST` from here and apply the same mode
-      detection above.
-
-   c. **Nothing found anywhere** → stop: "No credential found. Set `API_KEY`
-      to your 42Crunch token — `api_*` for a platform API token, `ide_*` for
-      an IDE token, or a Base64 string for freemium access. Place it in your
-      environment or a `.env` file and re-run."
+   - **`FREEMIUM_TOKEN`** is set → **Freemium mode**. Use
+     `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>`
+     in all commands. Proceed silently.
+   - **`API_KEY`** starts with `api_` or `ide_` → **Platform mode**. Read
+     `PLATFORM_HOST` from the same file (default
+     `https://demolabs.42crunch.cloud`). Proceed silently.
+   - **Neither found** → stop: "No credential found. Run `42crunch-setup-v2`
+     to configure your token."
 
 4. **Tag detection** — platform mode only. Run silently. Read
    `references/tag-detection.md`. In freemium mode, skip tag detection
@@ -144,12 +133,13 @@ If a phase was skipped (user declined), note that instead of its results.
 
 ## Environment Variables
 
-| Variable          | Mode              | Purpose                                                                                                 | Default                            |
-|-------------------|-------------------|---------------------------------------------------------------------------------------------------------|------------------------------------|
-| `API_KEY`         | Platform/Freemium | Token determines mode: `api_*` = platform API, `ide_*` = platform IDE, Base64 = freemium (`--token`)   | —                                  |
-| `PLATFORM_HOST`   | Platform          | Platform base URL                                                                                       | `https://demolabs.42crunch.cloud`  |
-| `SCAN42C_HOST`    | Both              | Scan target base URL (overrides OAS `servers[0]`)                                                       | None                               |
+| Variable          | Mode      | Purpose                                   | Default                            |
+|-------------------|-----------|-------------------------------------------|------------------------------------|
+| `API_KEY`         | Platform  | `api_*` or `ide_*` token                 | —                                  |
+| `PLATFORM_HOST`   | Platform  | Platform base URL                         | `https://demolabs.42crunch.cloud`  |
+| `FREEMIUM_TOKEN`  | Freemium  | Base64 token, passed as `--token`         | —                                  |
+| `SCAN42C_HOST`    | Both      | Scan target base URL (overrides OAS `servers[0]`) | None                       |
 
 **Platform mode**: `API_KEY` and `PLATFORM_HOST` are set for every command. `--tag` and `--report-sqg` are applied when a tag is resolved.
 
-**Freemium mode**: `--freemium-host stateless.42crunch.com:443` and `--token <API_KEY>` are used for every command. No `--tag` or `--report-sqg`.
+**Freemium mode**: `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>` are used for every command. No `--tag` or `--report-sqg`.

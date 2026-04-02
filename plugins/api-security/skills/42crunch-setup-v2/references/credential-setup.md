@@ -1,173 +1,148 @@
 # Credential Setup Reference
 
-Follow this procedure to configure the API key used by all 42Crunch skills.
+Follow this procedure to configure credentials used by all 42Crunch skills.
 All detection steps run silently — surface output only on failure or user prompts.
+
+Credentials are stored exclusively in `~/.42crunch/conf/env` (macOS/Linux) or
+`%APPDATA%\42Crunch\conf\env` (Windows). No project-level `.env` files are
+used.
 
 ---
 
 ## Step 1 — Check for Existing Credentials
 
-Before asking the user for anything, silently scan for an existing `API_KEY`.
+Silently check `~/.42crunch/conf/env` for either credential variable:
 
-**Check environment variable:**
-```bash
-[ -n "$API_KEY" ] && echo "found in environment"
-```
-
-**Walk upward from the current directory, checking `.env` files, stopping at the repo root:**
-```bash
-dir="$PWD"
-while [ "$dir" != "/" ]; do
-  [ -f "$dir/.env" ] && grep -q "^API_KEY=" "$dir/.env" && echo "$dir/.env" && break
-  dir="$(dirname "$dir")"
-done
-```
-
-**Check global location:**
 ```bash
 # macOS / Linux
-grep "^API_KEY=" "$HOME/.42crunch/conf/env" 2>/dev/null
-
-# fallback global location
-grep "^API_KEY=" "$HOME/.42crunch/.env" 2>/dev/null
+grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
 ```
 
-**If an `API_KEY` is found:**
+```powershell
+# Windows
+Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(FREEMIUM_TOKEN|API_KEY)=" 2>$null
+```
 
-Detect mode:
-- Starts with `api_` or `ide_` → **Platform mode**
-- Otherwise → **Freemium mode**
+**Mode detection from the file:**
 
-Inform the user (masking the key):
-> An API key is already configured (`<masked-key>`) in `<source>` — running in
-> **<mode>** mode.
+- `FREEMIUM_TOKEN` is present → **Freemium mode**
+- `API_KEY` starts with `api_` or `ide_` → **Platform mode**
+
+**If a credential is found**, inform the user (masking the value):
+
+> Credentials already configured in `~/.42crunch/conf/env` — running in
+> **<mode>** mode. Key: `<masked>`.
 >
-> Would you like to keep the existing key or replace it with a new one?
+> Would you like to keep the existing credentials or replace them?
+
+Masking rules: `api_••••••••` / `ide_••••••••` for platform tokens; `••••••••`
+for freemium.
 
 If keeping → **credential setup complete.**
 If replacing → continue to Step 2.
 
 ---
 
-## Step 2 — Request the API Key
+## Step 2 — Request the Token
 
 Present this to the user:
 
-> Please enter your 42Crunch API key. The key type determines which mode the
-> tools run in:
+> Please enter your 42Crunch token. The format determines which mode the tools
+> run in:
 >
-> | Prefix    | Type                  | Mode           |
-> |-----------|-----------------------|----------------|
-> | `api_…`   | Platform API token    | Platform mode  |
-> | `ide_…`   | Platform IDE token    | Platform mode  |
-> | *(other)* | Freemium Base64 token | Freemium mode  |
+> | Value format    | Variable written  | Mode           |
+> |-----------------|-------------------|----------------|
+> | `api_…`         | `API_KEY`         | Platform mode  |
+> | `ide_…`         | `API_KEY`         | Platform mode  |
+> | Base64 string   | `FREEMIUM_TOKEN`  | Freemium mode  |
 >
-> You can find your key in the 42Crunch Platform under **Settings → API Tokens**,
-> or use the token from the IDE extension settings for IDE tokens.
+> Platform tokens are available in the 42Crunch Platform under
+> **Settings → API Tokens**. IDE tokens come from the IDE extension settings.
+> Freemium tokens are provided by the 42Crunch freemium service.
 
-Wait for the user to paste the key.
+Wait for the user to paste the token.
 
 ---
 
 ## Step 3 — Detect Mode and Collect Platform Host
 
-Inspect the key prefix:
+Inspect the token:
 
-**`api_` or `ide_` → Platform mode.**
+**`api_` or `ide_` prefix → Platform mode.**
+
 Ask:
 > What is your 42Crunch Platform URL?
 > (Press Enter to use the default: `https://demolabs.42crunch.cloud`)
 
-Store the answer as `PLATFORM_HOST`. If empty, default to `https://demolabs.42crunch.cloud`.
+Store as `PLATFORM_HOST`. If empty, default to `https://demolabs.42crunch.cloud`.
 Trim any trailing slashes.
 
 **Anything else → Freemium mode.** No host prompt needed.
 
 ---
 
-## Step 4 — Choose Storage Location
+## Step 4 — Write the Credentials File
 
-Ask the user where to store the credentials:
+Create the directory if it does not exist:
 
-> Where should the API key be saved?
->
-> **Option A — Project `.env`** (`./.env` in the current working directory)
-> Good for per-project configuration. Make sure `.env` is in `.gitignore`.
->
-> **Option B — Global config** (`~/.42crunch/conf/env`)
-> Good for personal workstations where all projects share the same credentials.
-
----
-
-## Step 5 — Write the Credentials File
-
-### Option A — Project `.env`
-
-Write or append to `./.env`:
-
-```
-API_KEY=<value>
-PLATFORM_HOST=<value>   # omit for freemium mode
-```
-
-Do not quote values. Do not add spaces around `=`.
-
-Check whether `.env` is already in `.gitignore`:
 ```bash
-grep -qE '^\.env$|^\.env\b' .gitignore 2>/dev/null || echo "not ignored"
-```
-
-If not ignored (and a git repo exists), remind the user:
-> Add `.env` to your `.gitignore` to prevent accidentally committing your API key.
-
-### Option B — Global config (`~/.42crunch/conf/env`)
-
-Create the directory if needed:
-```bash
+# macOS / Linux
 mkdir -p "$HOME/.42crunch/conf"
 ```
 
-Write the file:
-```
-PLATFORM_HOST=<value>   # omit for freemium mode
-API_KEY=<value>
-```
-
-**Windows (PowerShell):**
 ```powershell
+# Windows
 New-Item -ItemType Directory -Force -Path "$env:APPDATA\42Crunch\conf" | Out-Null
-@"
-PLATFORM_HOST=<value>
-API_KEY=<value>
-"@ | Set-Content -Path "$env:APPDATA\42Crunch\conf\env" -Encoding UTF8
 ```
 
-**Set restrictive permissions on the file to protect the token:**
+Write the file. Do not quote values. Do not add spaces around `=`.
+
+**Platform mode** — write to `~/.42crunch/conf/env`:
+
+```
+API_KEY=<value>
+PLATFORM_HOST=<value>
+```
+
+**Freemium mode** — write to `~/.42crunch/conf/env`:
+
+```
+FREEMIUM_TOKEN=<value>
+```
+
+**Set restrictive permissions (macOS / Linux only):**
+
 ```bash
-# macOS / Linux only
 chmod 600 "$HOME/.42crunch/conf/env"
 ```
+
 Skip on Windows — `APPDATA` is already protected by Windows ACLs.
 
 ---
 
-## Step 6 — Verify
+## Step 5 — Verify
 
-Re-read the file and confirm `API_KEY` is present:
-```bash
-grep "^API_KEY=" <chosen-file>
-```
-
-Display confirmation with the key **masked** (`prefix_••••••••` for platform
-tokens, `••••••••` for freemium):
+Re-read the file and confirm the correct variable is present:
 
 **Platform mode:**
-> API key saved to `<path>`.
+```bash
+grep "^API_KEY=" "$HOME/.42crunch/conf/env"
+```
+
+**Freemium mode:**
+```bash
+grep "^FREEMIUM_TOKEN=" "$HOME/.42crunch/conf/env"
+```
+
+Display confirmation with the value **masked**:
+
+**Platform mode:**
+> Credentials saved to `~/.42crunch/conf/env`.
 > Mode: **Platform** | Key: `api_••••••••` | Host: `https://demolabs.42crunch.cloud`
 
 **Freemium mode:**
-> API key saved to `<path>`.
-> Mode: **Freemium** | Key: `••••••••`
+> Credentials saved to `~/.42crunch/conf/env`.
+> Mode: **Freemium** | Token: `••••••••`
 
 ---
 
@@ -175,6 +150,6 @@ tokens, `••••••••` for freemium):
 
 | Situation | Action |
 |---|---|
-| User provides empty API key | Re-prompt once; if still empty, stop with a warning that binary is installed but not activated |
+| User provides empty token | Re-prompt once; if still empty, stop with a warning that binary is installed but credentials are not configured |
 | User provides empty Platform URL | Use the default `https://demolabs.42crunch.cloud` |
-| Cannot write to credentials file | Report the permission error; suggest running with elevated privileges or choosing the other storage option |
+| Cannot write to credentials file | Report the permission error; suggest `chmod u+w ~/.42crunch/conf/env` or creating the directory manually |
