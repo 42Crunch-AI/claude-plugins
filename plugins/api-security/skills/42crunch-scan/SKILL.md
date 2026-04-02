@@ -28,9 +28,13 @@ running `42crunch-audit` first.
 1. **Resolve the OAS file.** Use the file currently open in the editor, or
    accept a path provided by the user.
 
-2. **Binary discovery** — run silently. Read `references/binary-discovery.md`
-   for the full multi-IDE location logic (Step 0 checks the persistent cache
-   first). Surface output to the user only if discovery fails.
+2. **Setup prerequisite** — invoke the `42crunch-setup-v2` skill before
+   proceeding. Setup ensures the `42c-ast` binary is installed and up to date,
+   and that credentials are configured. If the binary cache
+   (`~/.42crunch/.resolved-binary`) already points to a working binary and
+   credentials are already present, setup exits immediately without user
+   interaction. Surface output to the user only if setup requires input or fails.
+   Do not proceed if setup fails.
 
 3. **Credential check** — run silently.
    Token format rules: platform API tokens start with `api_`; platform IDE
@@ -38,7 +42,8 @@ running `42crunch-audit` first.
    prefix.
 
    Check in this order (environment first, then walk upward from the OAS
-   directory checking `.env` files, stopping at the repository root):
+   directory checking `.env` files, stopping at the repository root, then the
+   global config written by `42crunch-setup-v2`):
 
    a. **`API_KEY`** — if found, detect mode from the value:
       - Starts with `api_` → **Platform mode** (API token). Set `PLATFORM_HOST`
@@ -49,9 +54,15 @@ running `42crunch-audit` first.
         `--freemium-host stateless.42crunch.com:443` and `--token <API_KEY>`
         in all commands. Proceed silently.
 
-   b. **Nothing found** → stop: "No credential found. Set `API_KEY` to your
-      42Crunch token — `api_*` for a platform API token, `ide_*` for an IDE
-      token, or a Base64 string for freemium access. Place it in your
+   b. **Nothing found in environment or `.env` walk-up** → check
+      `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env`
+      (Windows) — the global config written by `42crunch-setup-v2`. Read
+      `API_KEY` and `PLATFORM_HOST` from here and apply the same mode
+      detection above.
+
+   c. **Nothing found anywhere** → stop: "No credential found. Set `API_KEY`
+      to your 42Crunch token — `api_*` for a platform API token, `ide_*` for
+      an IDE token, or a Base64 string for freemium access. Place it in your
       environment or a `.env` file and re-run."
 
 4. **Tag detection** — platform mode only. Run silently. Read
