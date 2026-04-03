@@ -36,10 +36,13 @@ explicit user permission before execution.
      setup fails.
    - **Present** → run silently:
      1. Get installed version: `"$BINARY_PATH" --version`
+        Parse the semver string from the output (e.g. extract `X.Y.Z`).
+        If the version cannot be parsed, treat as outdated.
      2. Fetch manifest: `curl -fsSL https://repo.42crunch.com/downloads/42c-ast-manifest.json`
-     3. Compare installed version to `LATEST_VERSION` for the current platform.
-     4. **Outdated** → silently download and replace the binary using the same
-        install steps as `42crunch-setup` (download → SHA-256 verify → chmod +x).
+     3. Compare `INSTALLED_VERSION` to `LATEST_VERSION` for the current platform.
+     4. **Outdated** (or version unparseable) → silently download and replace the
+        binary using the same install steps as `42crunch-setup`
+        (download → SHA-256 verify → chmod +x).
         Inform the user: `42c-ast updated from v<old> to v<new>.`
      5. **Up to date** → proceed silently.
      6. **Manifest fetch fails** → warn but continue with the installed binary.
