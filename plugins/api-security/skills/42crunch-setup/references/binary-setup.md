@@ -14,7 +14,7 @@ Detect the OS and resolve the canonical binary path:
 | macOS / Linux | `$HOME/.42crunch/bin/42c-ast`                   |
 | Windows       | `$env:APPDATA\42Crunch\bin\42c-ast.exe`         |
 
-Check whether the binary exists and runs:
+Check whether the binary exists and works:
 
 ```bash
 # macOS / Linux
@@ -28,16 +28,9 @@ if (Test-Path "$env:APPDATA\42Crunch\bin\42c-ast.exe") {
 }
 ```
 
-- **Binary missing or does not run** → continue to Step 1.
-- **Binary present and `--version` exits 0** → continue to Step 2 (fetch manifest
-  and compare versions). Do **not** skip to credentials — version must be verified
-  first.
-  - Parse the semver string from the `--version` output (e.g. extract `X.Y.Z`).
-    Store as `INSTALLED_VERSION`.
-  - If `INSTALLED_VERSION` **equals** `LATEST_VERSION`: binary is up to date.
-    **Exit this procedure with success** — skip to credential setup.
-  - If `INSTALLED_VERSION` is **older** (or version cannot be parsed): inform
-    the user and continue to Step 3 to download and replace the binary.
+If the binary exists and `--version` exits 0 → **binary setup is complete. Exit this procedure with success.**
+
+If the binary is missing or does not run → continue to Step 1.
 
 ---
 
@@ -170,10 +163,9 @@ If it fails, stop:
 
 | Situation | Action |
 |---|---|
-| Manifest fetch fails (network error) — no binary installed | Report the error. Stop — cannot install without the manifest |
-| Manifest fetch fails (network error) — binary already installed | Warn that version currency cannot be verified; continue to credential setup |
-| Installed `--version` unparseable | Treat as outdated; proceed with download |
+| Manifest fetch fails (network error) | Report the error. Stop — cannot install without the manifest |
 | No manifest entry for current platform | Report unsupported platform; stop |
 | Download fails | Report error with `DOWNLOAD_URL` for manual download |
 | Checksum mismatch | Delete partial file and stop; ask user to retry |
 | Cannot write to `BIN_DIR` | Report permission error; suggest elevated privileges |
+| Update download fails (binary already installed) | Inform the user: "The update download failed — continuing with the version you have installed (v`<old-version>`). Your results will still be accurate. Run `42crunch-setup` to retry the update when your connection is more stable." Continue with the existing binary. |

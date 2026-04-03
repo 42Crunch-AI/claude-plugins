@@ -13,6 +13,11 @@ workflow without `--tag` or `--report-sqg`.
 
 ## Step 1 — SQLite Workspace Database (VS Code variants)
 
+Before running the database query, announce to the user:
+> "Looking for your platform tag..."
+
+Do not announce each individual database file checked.
+
 The 42Crunch VS Code extension stores tag associations in the IDE's SQLite
 workspace state database. Query all matching `state.vscdb` files across every
 VS Code-family IDE that may be installed.
@@ -94,9 +99,18 @@ Set the following audit flags: `--tag <category>:<tagname>`, `--report-sqg`.
 
 ### Tag not found
 
-> "No platform tag was found for this API. This skill requires a platform tag
-> to apply SQGs, customisations, and data dictionaries. Please assign a tag
-> via the 42Crunch extension and re-run."
+> "This API doesn't have a 42Crunch platform tag yet, so the audit can't apply
+> your organisation's Security Quality Gates, data dictionaries, or
+> customisations.
+>
+> Here's how to assign a tag in about 30 seconds:
+> 1. Open the 42Crunch extension panel in your IDE (the shield icon in the sidebar).
+> 2. Find this file in the API list — `<filename>`.
+> 3. Click **Assign Tag**, choose the category and tag that matches this API, and save.
+>
+> Once the tag is saved, run this skill again and it will pick up the tag
+> automatically. If you don't see any tags in the list, ask your 42Crunch
+> platform administrator to create one."
 
 **Stop.** Do not run any audit or scan commands. Do not fall back to running
 without a tag.

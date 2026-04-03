@@ -22,13 +22,20 @@ Prepares the environment for 42Crunch audit and scan workflows in two phases:
 
 ### Step 1 — Introduce the setup
 
-Greet the user and briefly explain what will happen:
+Greet the user and explain what they'll be able to do once setup is complete:
 
-> I'll set up your 42Crunch environment in two steps:
-> 1. Ensure the `42c-ast` binary is available on this machine.
-> 2. Configure your credentials so audit and scan can authenticate.
+> Welcome — let me get your 42Crunch environment ready. This is a one-time
+> setup that takes about two minutes. Once done, you'll be able to:
 >
-> Let's get started.
+> - **Audit** any OpenAPI file for security issues and get a scored, actionable report
+> - **Scan** a live API to catch BOLA, BFLA, and conformance problems
+> - **Fix** SQG-blocking issues automatically, with your approval at every step
+>
+> I'll handle this in two quick steps:
+> 1. Install the `42c-ast` analysis binary on this machine.
+> 2. Connect your 42Crunch credentials (existing platform account or free account).
+>
+> Let's go.
 
 ### Step 2 — Binary setup
 
@@ -93,10 +100,20 @@ Display the setup summary (see Output Format below).
 
 ### Step 6 — Recommend next steps
 
-> Your environment is ready. You can now run:
-> - `42crunch-audit` — static security analysis of an OpenAPI file
-> - `42crunch-scan` — live conformance and authorization testing against a running API
-> - `42crunch-v2` — combined audit + scan in one workflow
+> You're all set. Here's what you can do right now:
+>
+> - **`42crunch-audit`** — Hand me an OpenAPI file and I'll score it, classify
+>   every security issue by severity, and fix the SQG-blocking ones with your
+>   approval. A good first step if you haven't audited this API before.
+>
+> - **`42crunch-scan`** — Run a live conformance and authorization test against
+>   a running API. I'll check for BOLA, BFLA, and response-contract violations.
+>   Best run after the audit passes.
+>
+> - **`42crunch-v2`** — Runs both audit and scan back-to-back. The recommended
+>   workflow when you want the full picture in one session.
+>
+> Which would you like to start with?
 
 ---
 

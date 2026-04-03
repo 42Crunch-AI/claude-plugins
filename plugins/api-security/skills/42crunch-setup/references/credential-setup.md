@@ -28,12 +28,9 @@ Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(FREEMIUM_TOKEN|
 - `FREEMIUM_TOKEN` is present → **Freemium mode**
 - `API_KEY` starts with `api_` or `ide_` → **Platform mode**
 
-**If a credential is found**, inform the user (masking the value):
-
-> Credentials already configured in `~/.42crunch/conf/env` — running in
-> **<mode>** mode. Key: `<masked>`.
->
-> Would you like to keep the existing credentials or replace them?
+**If a credential is found**, call `AskUserQuestion`:
+- **question**: `"Credentials already configured in ~/.42crunch/conf/env — running in <mode> mode. Key: <masked>. Would you like to keep the existing credentials or replace them?"`
+- **options**: `["Keep existing credentials", "Replace credentials"]`
 
 Masking rules: `api_••••••••` / `ide_••••••••` for platform tokens; `••••••••`
 for freemium.
@@ -45,27 +42,24 @@ If replacing → continue to Step 2.
 
 ## Step 2 — Determine User Type
 
-Ask the user:
-
-> Are you an existing 42Crunch user?
+Call `AskUserQuestion`:
+- **question**: `"Do you have an existing 42Crunch platform account? (Platform accounts log in to a URL like company.42crunch.cloud and use an API key. Freemium is a free personal account that covers full audit and scan functionalities.)"`
+- **options**: `["Yes — I have a platform account", "No — I'm using freemium"]`
 
 ---
 
 ### Path A — Existing User (Platform mode)
 
-Ask:
-> Please enter your API Key:
+Call `AskUserQuestion`:
+- **question**: `"Please enter your API Key (it usually starts with api_ or ide_):"`
 
-Wait for input. Then ask:
-> What is your 42Crunch Platform URL?
->
-> [1] US  — https://us.42crunch.cloud/
-> [2] EU  — https://eu.42crunch.cloud/
-> [3] Other — enter your platform URL:
+Wait for input. Then call `AskUserQuestion`:
+- **question**: `"Which region hosts your 42Crunch platform? (Your organisation's IT or security team can confirm this — it's also visible in the URL when you log in.)"`
+- **options**: `["US — https://us.42crunch.cloud/", "EU — https://eu.42crunch.cloud/", "Other — I'll enter my platform URL manually"]`
 
-- If **[1]** chosen: `PLATFORM_HOST=https://us.42crunch.cloud`
-- If **[2]** chosen: `PLATFORM_HOST=https://eu.42crunch.cloud`
-- If **[3]** chosen: prompt for the URL; store as `PLATFORM_HOST`. Trim any trailing slashes.
+- If **US** chosen: `PLATFORM_HOST=https://us.42crunch.cloud`
+- If **EU** chosen: `PLATFORM_HOST=https://eu.42crunch.cloud`
+- If **Other** chosen: call `AskUserQuestion` — **question**: `"Please enter your platform URL (e.g. https://your-org.42crunch.cloud):"` — store response as `PLATFORM_HOST`. Trim any trailing slashes.
 
 Store values as `API_KEY` and `PLATFORM_HOST`. Continue to Step 3.
 
@@ -73,24 +67,28 @@ Store values as `API_KEY` and `PLATFORM_HOST`. Continue to Step 3.
 
 ### Path B — Not an Existing User
 
-Ask:
-> Are you a registered 42Crunch Freemium user?
+Call `AskUserQuestion`:
+- **question**: `"Are you a registered 42Crunch Freemium user?"`
+- **options**: `["Yes — I have a token", "No — I need to register"]`
 
 #### Path B-1 — Registered Freemium user
 
-Ask:
-> Please enter your 42Crunch Freemium Token:
+Call `AskUserQuestion`:
+- **question**: `"Please paste your Freemium Token (it's a long Base64 string from your registration confirmation email):"`
 
 Wait for input. Store value as `FREEMIUM_TOKEN`. Continue to Step 3.
 
 #### Path B-2 — Not registered
 
 Inform the user:
-> To use 42Crunch tools, you need a free account.
-> Register here: https://42crunch.com/freemium/
+> No problem — getting a free account takes a minute.
 >
-> Once you have registered, rerun setup and choose "Yes" when asked if you are
-> a registered Freemium user.
+> 1. Visit **https://42crunch.com/freemium/**.
+> 2. Fill in your email address, accept terms and conditions and click Submit.
+> 3. Check your inbox for a confirmation email that includes your freemium token.
+>
+> When you're ready, just say "continue" or "I have my token" and I'll pick up
+> exactly where we left off — you won't need to restart setup.
 
 **Stop — do not proceed.** Credential setup is incomplete. Do not write any credentials file.
 
@@ -165,7 +163,7 @@ Display confirmation with the value **masked**:
 
 | Situation | Action |
 |---|---|
-| User provides empty API Key | Re-prompt once; if still empty, stop with a warning that binary is installed but credentials are not configured |
-| User provides empty Platform URL (Other) | Re-prompt once; if still empty, stop with a warning |
-| User provides empty Freemium Token | Re-prompt once; if still empty, stop with a warning |
+| User provides empty API Key | Re-prompt once with: "It looks like the key didn't come through — please paste it again (it usually starts with `api_` or `ide_`). If you're not sure where to find it, check the 42Crunch platform under **Settings → API Keys**." If still empty, stop with: "I wasn't able to capture your API key. Your binary is installed and working — when you're ready, run `42crunch-setup` again to finish credential setup." |
+| User provides empty Platform URL (Other) | Re-prompt once with: "I didn't catch the URL — please paste your platform address (it should look like `https://your-org.42crunch.cloud`)." If still empty, stop with: "I wasn't able to capture your platform URL. Your binary is installed — run `42crunch-setup` again whenever you have the details ready." |
+| User provides empty Freemium Token | Re-prompt once with: "The token didn't come through — please paste it again. You can find it in the registration confirmation email you received" If still empty, stop with: "I wasn't able to capture your Freemium token. Your binary is installed — run `42crunch-setup` again whenever you have the token ready." |
 | Cannot write to credentials file | Report the permission error; suggest `chmod u+w ~/.42crunch/conf/env` or creating the directory manually |

@@ -106,29 +106,21 @@ Flag privileged operations (admin-only actions) separately as BFLA candidates
 even if they have no path ID parameter.
 
 Name all candidates in the credential collection prompt so the user knows why
-two users are needed. Example:
+two users are needed. Call `AskUserQuestion`:
+- **question**: `"I found DELETE /{resource}/{id}, GET /{resource}/{id}, and PATCH /{resource}/{id} as BOLA candidates. I'll need credentials for a second user who should NOT have access to the first user's resources. Can you provide a token or login details for this second user?"`
 
-> "I found `DELETE /{resource}/{id}`, `GET /{resource}/{id}`, and
-> `PATCH /{resource}/{id}` as BOLA candidates. I'll need credentials for
-> a second user who should NOT have access to the first user's resources. Can
-> you provide a token or login details for this second user?"
-
-If elevated privileges are also needed (BFLA), collect those in a separate
-prompt with a clear label (e.g. "admin user").
+If elevated privileges are also needed (BFLA), call a separate `AskUserQuestion`
+with a clear label (e.g. "admin user").
 
 Do not proceed until at least one valid credential set is confirmed.
 
 ### Test data / seed check
 
-Ask the user before building the scan config:
+Call `AskUserQuestion` before building the scan config:
+- **question**: `"Does the API need pre-seeded database records (accounts, users, reference data) to exist before scanning? If the server is freshly started or the database was wiped, happy paths will fail with 404 / 401 even with correct credentials."`
+- **options**: `["Yes — I'll seed first", "No — it's ready as-is"]`
 
-> "Does the API need pre-seeded database records (accounts, users, reference
-> data) to exist before scanning? If the server is freshly started or the
-> database was wiped, happy paths will fail with 404 / 401 even with correct
-> credentials."
-
-If yes — ask for the seed command or procedure and confirm it is run before
-proceeding. Record the seed command so it can be re-run if destructive
+If yes — call `AskUserQuestion` — **question**: `"Please share the seed command or procedure so I can record it for re-use after destructive scan operations:"` — confirm it is run before proceeding. Record the seed command so it can be re-run if destructive
 operations (see Step 3 Class D) delete test data during a scan run.
 
 ### Writing credential acquisition flows into `authenticationDetails`
@@ -301,8 +293,9 @@ DeleteUser             | B      | yes   | UserRegistration → /{userId}
 DeleteAccount          | D      | no    | register+login throwaway → delete throwaway
 ```
 
-Announce the table to the user and ask them to confirm or correct any
-misclassifications before writing the config.
+Call `AskUserQuestion`:
+- **question**: `"Here is the proposed operation classification (shown above). Does this look correct, or do you need to correct any misclassifications?"`
+- **options**: `["Yes — proceed", "No — I need to correct some classifications"]`
 
 ---
 
@@ -480,7 +473,7 @@ For each operation where the happy path failed, determine the root cause:
 | Observed symptom | Root cause | Action |
 |---|---|---|
 | HTTP 400 / 422 with validation error | **Bad sample data** — request body or parameters fail server validation | Ask the user: provide valid values, or supply a Postman collection |
-| HTTP 2xx but conformance FAIL (undocumented fields in response) | **Excessive response data** — server returns fields not in the OAS schema (potential API3 data exposure) | **Block and ask the user.** List every undocumented field by operation. Offer: (1) add the fields to the OAS — conformance enforced going forward; (2) accept the mismatch — recorded as an accepted finding. Do not proceed to the full scan until the user has made an explicit choice for every affected operation. |
+| HTTP 2xx but conformance FAIL (undocumented fields in response) | **Excessive response data** — server returns fields not in the OAS schema (potential OWASP API3 Excessive Data Exposure) | **Block and call `AskUserQuestion`**: question: `"The response for <operation> includes fields not in your OAS schema: [list fields]. Undocumented fields in responses can expose internal data that clients shouldn't see (OWASP API3). How would you like to handle it?"` options: `["Add these fields to the OAS", "Accept as-is"]`. Do not proceed to the full scan until the user has made an explicit choice for every affected operation. |
 | HTTP 2xx but wrong success code (e.g. got `200`, expected `201`) | **Status code mismatch** — `defaultResponse` in the scan config doesn't match reality | Update `defaultResponse` for that operation |
 | HTTP 404 | **Unresolved path variable** — scenario chain is missing or the `variableAssignment` JSON Pointer is wrong | Inspect the chain; fix the JSON Pointer, or build a missing chain |
 | HTTP 401 / 403 | **Auth failure** — token is invalid, expired, or wrong scheme applied | Re-collect credentials; verify the token is still valid |
@@ -543,8 +536,16 @@ API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run <relative-oas-path> 
 ```
 
 **Freemium mode note**: No SQG is enforced by the platform for freemium scan. The
-`sqgPass` field in stdout will be absent or `true`. Present all scan findings to the
-user for information only — no automatic fix selection based on SQG blocking.
+`sqgPass` field in stdout will be absent or `true`. When presenting results in
+freemium mode, include this note for the user:
+
+> "In freemium mode, the scan shows all findings for your information — there
+> is no automatic quality gate. This means no finding will block your workflow,
+> but the authorization failures shown in red are real vulnerabilities worth
+> fixing regardless of the gate (OWASP API1/API5). The conformance findings in
+> yellow document gaps between your OAS contract and your API's actual behaviour."
+
+Then ask which (if any) findings the user wants to address.
 
 **The SQG result is only in stdout, not in `scan-report.json`.** Parse it from
 the JSON output of the command.
@@ -622,6 +623,24 @@ Scan Results  |  SQG: N/A (Freemium — no scan SQG enforced)
 (write "(none)" in any tier that has no findings)
 ```
 
+### After rendering — Security implication narratives
+
+If any BOLA finding was confirmed, add:
+> "A confirmed BOLA vulnerability means an authenticated user can access or
+> modify another user's resources by changing an ID in the URL — this is one
+> of the most common and impactful API vulnerabilities (OWASP API1). The OAS
+> fix I'm proposing adds or corrects the `security` requirement on the affected
+> operation to document the contract correctly; you'll also want to verify your
+> server-side authorisation checks the resource owner on each request."
+
+If any BFLA finding was confirmed, add:
+> "A confirmed BFLA vulnerability means a low-privilege user can invoke an
+> admin-only operation (OWASP API5). The fix documents the required privilege
+> level in the OAS; your backend authorisation logic is the definitive
+> enforcement point."
+
+---
+
 ### 7b — Determine fix candidates
 
 **Platform mode:**
@@ -638,38 +657,19 @@ Scan Results  |  SQG: N/A (Freemium — no scan SQG enforced)
 
 ### 7c — Consent Gate
 
-**Platform mode** — present the fix list before applying anything:
+**Platform mode** — call `AskUserQuestion`:
+- **question**: `"Here is the complete scan report (shown above). I can apply the following fixes to <filename>: 🔴 Authorization fixes: [list] 🟠 SQG-blocking conformance fixes: [list]. The 🟡 informational findings are not SQG-blocking and will not be fixed automatically — let me know if you'd like to address any of them too. What would you like to do?"`
+- **options**: `["Yes — apply all fixes now", "Show me the diff first", "No — skip fixes for now"]`
 
-> "Here is the complete scan report (shown above). I can apply the following
-> fixes to `<filename>`:
->
-> 🔴 Authorization fixes:
->   - [operation] → add `security` requirement [scheme name]
->   - ...
->
-> 🟠 SQG-blocking conformance fixes:
->   - [operation] → [one-line OAS change]
->   - ...
->
-> The 🟡 informational findings listed above are not SQG-blocking and will not
-> be fixed automatically. Let me know if you'd like to address any of them too.
->
-> Shall I proceed with these fixes?"
+**Freemium mode** — call `AskUserQuestion`:
+- **question**: `"Here is the complete scan report (shown above). No SQG enforcement applies in freemium mode. 🔴 Authorization fixes I can apply: [list] 🟡 Conformance findings (informational — your call whether to fix): [list]. What would you like to do?"`
+- **options**: `["Yes — apply the authorization fixes", "Show me the diff first", "No — skip fixes; summarise findings only"]`
 
-**Freemium mode** — present findings and ask what the user wants to fix:
+If the user chooses **"Show me the diff first"** in either mode, display the proposed
+change for each fix one at a time in unified diff format then call `AskUserQuestion`:
+- **question**: `"Apply this change?"` — **options**: `["Yes", "No — skip this one"]`
 
-> "Here is the complete scan report (shown above). No SQG enforcement applies
-> in freemium mode.
->
-> 🔴 Authorization fixes I can apply:
->   - [operation] → add `security` requirement [scheme name]
->   - ...
->
-> 🟡 Conformance findings (informational — your call whether to fix):
->   - [operation] → [description]
->   - ...
->
-> Which fixes would you like me to apply?"
+Only advance to the next fix after the user confirms the current one.
 
 Only apply fixes after explicit user confirmation.
 

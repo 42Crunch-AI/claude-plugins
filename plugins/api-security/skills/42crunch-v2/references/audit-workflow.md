@@ -68,6 +68,16 @@ Audit Score: <score> / 100  |  Security: <sec-score>/100  |  Data Validation: <d
 SQG (Freemium): PASSED / FAILED
 ```
 
+**Score interpretation — always include one line immediately after the score headline:**
+
+- Score ≥ 90: `Your API scores in the top tier — excellent security posture.`
+- Score 70–89: `Your API passes the SQG threshold. A few improvements could push it higher.`
+- Score 50–69: `Your API is approaching the SQG threshold — the blocking issues below are holding it back.`
+- Score < 50: `Your API score is below the SQG threshold. The issues below must be fixed to unblock the scan.`
+
+When the score crosses from below 70 to 70 or above after fixes are applied, add:
+> `This improvement moves your API from failing to passing the SQG threshold.`
+
 Freemium SQG rules (applied by the skill, not the platform):
 - Score **< 70** → SQG FAILED
 - Any issue with criticality **MEDIUM (2), HIGH (3), or CRITICAL (4)** → SQG-blocking (treated as 🔴)
@@ -172,16 +182,15 @@ them by number in their consent response.
 
 ## Step 3 — Consent Gate
 
-After rendering the report, pause and ask:
+After rendering the report, call `AskUserQuestion`:
+- **question**: `"I found N SQG-blocking issue(s) (🔴) that must be fixed to pass the SQG, plus M additional finding(s) for your information. For the blocking issues I propose the following changes to <filename>: 1. [issue title] → [one-line fix description] 2. ... What would you like to do?"`
+- **options**: `["Yes — apply all fixes now", "Show me the diff first", "No — skip fixes for now"]`
 
-> "I found **N SQG-blocking issue(s)** (listed above as 🔴) that must be fixed
-> to pass the SQG, plus **M additional finding(s)** for your information.
->
-> For the SQG-blocking issues I propose the following changes to `<filename>`:
-> 1. [issue title] → [one-line fix description]
-> 2. ...
->
-> Shall I apply these fixes now?"
+If the user chooses **"Show me the diff first"**, display the proposed change for each
+issue one at a time in unified diff format, then call `AskUserQuestion`:
+- **question**: `"Apply this change?"` — **options**: `["Yes", "No — skip this one"]`
+
+Only advance to the next fix after the user confirms the current one.
 
 Do **not** offer to fix non-blocking issues at this stage — only the 🔴 items.
 Only proceed to Step 4 after the user explicitly confirms.
