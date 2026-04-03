@@ -1,15 +1,13 @@
 ---
 name: 42crunch-v2
 description: >
-  Run 42Crunch API Security audit and scan workflows against an OpenAPI
-  Specification file. Use this skill whenever the user wants to audit an OAS
-  file for security issues, run a conformance or authorization scan, fix
-  SQG-blocking issues, test for BOLA or BFLA vulnerabilities, or generate and
-  configure a 42Crunch scan. Triggers on phrases like "run audit", "run scan",
-  "42crunch", "SQG", "conformance test", "fix audit issues", "BOLA test",
-  "BFLA test", or any reference to API security scoring or scan configuration.
-  Always use this skill when the user is working with 42Crunch tooling even if
-  they only mention one phase.
+  Run both a 42Crunch Audit and a live Scan together in a single pipeline.
+  Use this skill when the user wants to run audit and scan together, complete
+  the full security pipeline, or when the request is ambiguous about which
+  phase to run. Triggers on phrases like "run audit and scan", "full 42crunch
+  pipeline", "full security check", "audit then scan", "42crunch", or "SQG".
+  Do NOT use this skill if the user explicitly requests only an audit (use
+  42crunch-audit) or only a scan (use 42crunch-scan).
 ---
 
 # 42Crunch API Security Skill

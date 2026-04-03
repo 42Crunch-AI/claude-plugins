@@ -1,4 +1,5 @@
 ---
+name: oas-to-arazzo
 description: Generate an Arazzo Specification from an existing OpenAPI Specification file. Analyzes the OAS operations, identifies logical API workflows and step sequences, and produces a valid arazzo.yaml file.
 ---
 

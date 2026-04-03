@@ -1,4 +1,5 @@
 ---
+name: code-to-oas
 description: >
   Analyze an entire API codebase and generate an accurate OpenAPI Specification
   (OAS 3.0) file from the source code. Use this skill whenever the user wants
