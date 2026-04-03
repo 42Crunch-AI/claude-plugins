@@ -32,14 +32,14 @@ explicit user permission before execution.
    - Windows: `$env:APPDATA\42Crunch\bin\42c-ast.exe`
 
    Check if the binary exists:
-   - **Missing** → invoke `42crunch-setup-v2` for full setup. Do not proceed if
+   - **Missing** → invoke `42crunch-setup` for full setup. Do not proceed if
      setup fails.
    - **Present** → run silently:
      1. Get installed version: `"$BINARY_PATH" --version`
      2. Fetch manifest: `curl -fsSL https://repo.42crunch.com/downloads/42c-ast-manifest.json`
      3. Compare installed version to `LATEST_VERSION` for the current platform.
      4. **Outdated** → silently download and replace the binary using the same
-        install steps as `42crunch-setup-v2` (download → SHA-256 verify → chmod +x).
+        install steps as `42crunch-setup` (download → SHA-256 verify → chmod +x).
         Inform the user: `42c-ast updated from v<old> to v<new>.`
      5. **Up to date** → proceed silently.
      6. **Manifest fetch fails** → warn but continue with the installed binary.
@@ -50,14 +50,14 @@ explicit user permission before execution.
    grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
    ```
 
-   - **Credentials missing** → invoke `42crunch-setup-v2` (credentials flow
+   - **Credentials missing** → invoke `42crunch-setup` (credentials flow
      only). Do not proceed if setup fails.
    - **Credentials present** → proceed silently to Step 3.
 
 3. **Credential check** — run silently.
 
    Read `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env`
-   (Windows) — the config written by `42crunch-setup-v2`:
+   (Windows) — the config written by `42crunch-setup`:
 
    ```bash
    grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
@@ -69,7 +69,7 @@ explicit user permission before execution.
    - **`API_KEY`** starts with `api_` or `ide_` → **Platform mode**. Read
      `PLATFORM_HOST` from the same file (default
      `https://demolabs.42crunch.cloud`). Proceed silently.
-   - **Neither found** → stop: "No credential found. Run `42crunch-setup-v2`
+   - **Neither found** → stop: "No credential found. Run `42crunch-setup`
      to configure your token."
 
 4. **Tag detection** — platform mode only. Run silently. Read

@@ -1,5 +1,5 @@
 ---
-name: 42crunch-setup-v2
+name: 42crunch-setup
 description: >
   Set up the 42Crunch environment so that audit and scan skills can run
   without friction. Use this skill whenever the user wants to configure
