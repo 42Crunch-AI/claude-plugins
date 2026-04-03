@@ -14,7 +14,7 @@ plugins/
     .claude-plugin/
       plugin.json               # Plugin metadata
     skills/
-      42crunch-setup-v2/        # Install, configure, and credential setup
+      42crunch-setup/           # Install, configure, and credential setup
       42crunch-audit/           # Static OAS security audit
       42crunch-scan/            # Live conformance & authorization scan
       42crunch-v2/              # Combined audit + scan pipeline
@@ -24,7 +24,7 @@ plugins/
 
 ## Skills
 
-### `42crunch-setup-v2` — Install & Configure 42Crunch
+### `42crunch-setup` — Install & Configure 42Crunch
 
 Prepares the environment in two phases:
 
@@ -42,7 +42,7 @@ Credentials are stored in `~/.42crunch/conf/env` (file permissions `600` on macO
 
 ### `42crunch-audit` — Static OAS Security Audit
 
-Runs a static analysis of an OpenAPI Specification file and produces a scored report (0–100). Before running, silently checks that the `42c-ast` binary is installed and up to date (auto-updating if needed) and that credentials are configured — invoking `42crunch-setup-v2` automatically if either is missing.
+Runs a static analysis of an OpenAPI Specification file and produces a scored report (0–100). Before running, silently checks that the `42c-ast` binary is installed and up to date (auto-updating if needed) and that credentials are configured — invoking `42crunch-setup` automatically if either is missing.
 
 Findings are classified into three tiers:
 
@@ -106,7 +106,7 @@ The `42c-ast` binary is installed and kept up to date automatically. It is also 
 
 ## Configuration
 
-Credentials are resolved from `~/.42crunch/conf/env` (written by `42crunch-setup-v2`), then environment variables, then a `.env` file (walked upward from the OAS file to the repo root).
+Credentials are resolved from `~/.42crunch/conf/env` (written by `42crunch-setup`), then environment variables, then a `.env` file (walked upward from the OAS file to the repo root).
 
 | Variable | Description | Mode |
 |---|---|---|
