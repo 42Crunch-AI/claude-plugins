@@ -13,8 +13,8 @@ description: >
 # 42Crunch Setup
 
 Prepares the environment for 42Crunch audit and scan workflows in two phases:
-1. Ensure the `42c-ast` binary is installed and up to date.
-2. Configure and store the API key.
+1. Ensure the `42c-ast` binary is installed at the canonical path.
+2. Configure and store credentials.
 
 ---
 
@@ -25,8 +25,8 @@ Prepares the environment for 42Crunch audit and scan workflows in two phases:
 Greet the user and briefly explain what will happen:
 
 > I'll set up your 42Crunch environment in two steps:
-> 1. Ensure the `42c-ast` binary is available and up to date on this machine.
-> 2. Configure your API key so audit and scan can authenticate.
+> 1. Ensure the `42c-ast` binary is available on this machine.
+> 2. Configure your credentials so audit and scan can authenticate.
 >
 > Let's get started.
 
@@ -35,48 +35,53 @@ Greet the user and briefly explain what will happen:
 Follow `references/binary-setup.md` completely.
 
 The procedure covers, in order:
-- **Step 0** — Check the binary cache (`~/.42crunch/.resolved-binary`); skip all
-  remaining checks if a working binary is already there, but still run the version
-  check against the manifest.
-- **Step 1** — Detect VS Code via `$TERM_PROGRAM` / `$VSCODE_PID`.
-- **Step 2** — If VS Code: check for the 42Crunch extension; offer to install it
-  via `code --install-extension`. If installed, mark binary complete.
-- **Step 3** — If not VS Code (or user declines extension install): detect OS and
-  architecture; resolve `BIN_DIR` and `BINARY_PATH` for the platform.
-- **Step 4** — Fetch the manifest, resolve `LATEST_VERSION` / `DOWNLOAD_URL` /
-  `EXPECTED_SHA256`; compare against any installed version and skip download if
-  already up to date.
-- **Step 5** — Download, verify SHA-256, install, set permissions (`chmod +x` on
-  macOS/Linux), update the cache file.
+- **Step 0** — Check whether the binary already exists at the canonical path:
+  - macOS/Linux: `$HOME/.42crunch/bin/42c-ast`
+  - Windows: `%APPDATA%\42Crunch\bin\42c-ast.exe`
 
-Stop and surface a clear error if no binary can be located or installed after all
-options are exhausted. Do not proceed to Step 3.
+  If the binary is present and `--version` exits 0 → binary setup is complete.
+  Skip directly to Step 3 (Credential setup).
+
+- **Step 1** — Detect OS and architecture; resolve `BIN_DIR` and `BINARY_PATH`.
+- **Step 2** — Fetch the manifest, resolve `LATEST_VERSION` / `DOWNLOAD_URL` / `EXPECTED_SHA256`.
+- **Step 3** — Download, verify SHA-256, install, set permissions (`chmod +x` on
+  macOS/Linux), confirm.
+
+Stop and surface a clear error if the binary cannot be installed. Do not proceed to Step 3.
 
 ### Step 3 — Credential setup
 
 Follow `references/credential-setup.md` completely.
 
 The procedure covers, in order:
-- Silently check whether `API_KEY` is already set (environment variable, `.env`
-  walk-up from current directory to repo root, global `~/.42crunch/conf/env`).
-- If already configured: show mode + masked key, offer to keep or replace.
-- If not configured (or replacing): ask the user to paste their key, detect mode
-  from the prefix (`api_`/`ide_` → Platform, other → Freemium), optionally
-  collect `PLATFORM_HOST` (Platform mode only, default:
-  `https://demolabs.42crunch.cloud`), prompt for storage location (project `.env`
-  or global `~/.42crunch/conf/env`), write the file, set `chmod 600` on
-  macOS/Linux, and remind about `.gitignore` for project `.env`.
+- Silently check whether credentials are already present in
+  `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env`
+  (Windows). If already configured: show mode + masked key, offer to keep or replace.
+- If not configured (or replacing): walk the user through the guided flow:
+  - **Are you an existing 42Crunch user?**
+    - Yes → enter API Key → select Platform URL (US / EU / Other)
+    - No → **Are you a registered 42Crunch Freemium user?**
+      - Yes → enter Freemium Token
+      - No → show registration link (`https://42crunch.com/freemium/`) and stop
+- Write credentials to `~/.42crunch/conf/env`, set `chmod 600` on macOS/Linux.
 
 ### Step 4 — Final verification
 
 Run a quick end-to-end check:
 
 ```bash
-# Binary
-"$(cat ~/.42crunch/.resolved-binary)" --version
+# Binary (macOS / Linux)
+"$HOME/.42crunch/bin/42c-ast" --version
+```
 
-# Credentials
-grep "^API_KEY=" <chosen-env-file>
+```powershell
+# Binary (Windows)
+& "$env:APPDATA\42Crunch\bin\42c-ast.exe" --version
+```
+
+```bash
+# Credentials (macOS / Linux)
+grep -E "^(API_KEY|FREEMIUM_TOKEN)=" "$HOME/.42crunch/conf/env"
 ```
 
 If either check fails, report the specific failure and guide the user to resolve
@@ -103,7 +108,6 @@ Display the setup summary (see Output Format below).
 | Item             | Status                                              |
 |------------------|-----------------------------------------------------|
 | Binary           | <BINARY_PATH> v<version>                            |
-| Binary source    | <VS Code extension | Downloaded (<arch>) | Cached>  |
 | Credential mode  | <Platform | Freemium>                               |
 | API key          | <prefix_>••••••••  (stored in <path>)               |
 | Platform host    | <url>  ← omit this row for freemium mode            |
@@ -113,25 +117,22 @@ Display the setup summary (see Output Format below).
 
 ## General Constraints
 
-- All detection steps (cache check, VS Code check, extension check, credential
-  walk-up) run silently. Surface output only on failure or when prompting the user.
-- Never overwrite `~/.42crunch/.resolved-binary` when it already points to a
-  working, up-to-date binary.
-- Never print the API key in plaintext after the user enters it. Always mask it
-  (`prefix_••••••••` for platform tokens, `••••••••` for freemium).
+- All detection steps (binary check, credential check) run silently. Surface
+  output only on failure or when prompting the user.
+- Never print the API key or Freemium token in plaintext after the user enters
+  it. Always mask it (`api_••••••••` / `ide_••••••••` for platform tokens,
+  `••••••••` for freemium).
 - Use `bash_tool` for all shell commands; use `str_replace_editor` or
-  `create_file` when writing `.env` / config files — never shell redirection.
+  `create_file` when writing config files — never shell redirection.
 - Use `curl` for downloads; fall back to `wget` if `curl` is unavailable. On
   Windows use `Invoke-WebRequest`.
-- If `code --install-extension` is attempted but `code` is not on PATH, instruct
-  the user to run **"Shell Command: Install 'code' command in PATH"** from the
-  VS Code Command Palette before retrying.
 - On Windows: binary filename is `42c-ast.exe`, paths use `\`, config lives in
   `%APPDATA%\42Crunch\conf\env`, skip `chmod 600` (Windows ACLs protect `APPDATA`).
 
 ## Environment Variables
 
-| Variable        | Default                              | Mode            |
-|-----------------|--------------------------------------|-----------------|
-| `API_KEY`       | *(required)*                         | Both            |
-| `PLATFORM_HOST` | `https://demolabs.42crunch.cloud`    | Platform only   |
+| Variable        | Default                          | Mode            |
+|-----------------|----------------------------------|-----------------|
+| `API_KEY`       | *(required)*                     | Platform        |
+| `PLATFORM_HOST` | *(set during setup)*             | Platform only   |
+| `FREEMIUM_TOKEN`| *(required)*                     | Freemium        |

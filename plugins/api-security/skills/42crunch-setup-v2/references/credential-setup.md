@@ -11,7 +11,7 @@ used.
 
 ## Step 1 — Check for Existing Credentials
 
-Silently check `~/.42crunch/conf/env` for either credential variable:
+Silently check for an existing credentials file:
 
 ```bash
 # macOS / Linux
@@ -43,45 +43,60 @@ If replacing → continue to Step 2.
 
 ---
 
-## Step 2 — Request the Token
+## Step 2 — Determine User Type
 
-Present this to the user:
+Ask the user:
 
-> Please enter your 42Crunch token. The format determines which mode the tools
-> run in:
->
-> | Value format    | Variable written  | Mode           |
-> |-----------------|-------------------|----------------|
-> | `api_…`         | `API_KEY`         | Platform mode  |
-> | `ide_…`         | `API_KEY`         | Platform mode  |
-> | Base64 string   | `FREEMIUM_TOKEN`  | Freemium mode  |
->
-> Platform tokens are available in the 42Crunch Platform under
-> **Settings → API Tokens**. IDE tokens come from the IDE extension settings.
-> Freemium tokens are provided by the 42Crunch freemium service.
-
-Wait for the user to paste the token.
+> Are you an existing 42Crunch user?
 
 ---
 
-## Step 3 — Detect Mode and Collect Platform Host
-
-Inspect the token:
-
-**`api_` or `ide_` prefix → Platform mode.**
+### Path A — Existing User (Platform mode)
 
 Ask:
+> Please enter your API Key:
+
+Wait for input. Then ask:
 > What is your 42Crunch Platform URL?
-> (Press Enter to use the default: `https://demolabs.42crunch.cloud`)
+>
+> [1] US  — https://us.42crunch.cloud/
+> [2] EU  — https://eu.42crunch.cloud/
+> [3] Other — enter your platform URL:
 
-Store as `PLATFORM_HOST`. If empty, default to `https://demolabs.42crunch.cloud`.
-Trim any trailing slashes.
+- If **[1]** chosen: `PLATFORM_HOST=https://us.42crunch.cloud`
+- If **[2]** chosen: `PLATFORM_HOST=https://eu.42crunch.cloud`
+- If **[3]** chosen: prompt for the URL; store as `PLATFORM_HOST`. Trim any trailing slashes.
 
-**Anything else → Freemium mode.** No host prompt needed.
+Store values as `API_KEY` and `PLATFORM_HOST`. Continue to Step 3.
 
 ---
 
-## Step 4 — Write the Credentials File
+### Path B — Not an Existing User
+
+Ask:
+> Are you a registered 42Crunch Freemium user?
+
+#### Path B-1 — Registered Freemium user
+
+Ask:
+> Please enter your 42Crunch Freemium Token:
+
+Wait for input. Store value as `FREEMIUM_TOKEN`. Continue to Step 3.
+
+#### Path B-2 — Not registered
+
+Inform the user:
+> To use 42Crunch tools, you need a free account.
+> Register here: https://42crunch.com/freemium/
+>
+> Once you have registered, rerun setup and choose "Yes" when asked if you are
+> a registered Freemium user.
+
+**Stop — do not proceed.** Credential setup is incomplete. Do not write any credentials file.
+
+---
+
+## Step 3 — Write the Credentials File
 
 Create the directory if it does not exist:
 
@@ -120,7 +135,7 @@ Skip on Windows — `APPDATA` is already protected by Windows ACLs.
 
 ---
 
-## Step 5 — Verify
+## Step 4 — Verify
 
 Re-read the file and confirm the correct variable is present:
 
@@ -138,7 +153,7 @@ Display confirmation with the value **masked**:
 
 **Platform mode:**
 > Credentials saved to `~/.42crunch/conf/env`.
-> Mode: **Platform** | Key: `api_••••••••` | Host: `https://demolabs.42crunch.cloud`
+> Mode: **Platform** | Key: `api_••••••••` | Host: `<PLATFORM_HOST>`
 
 **Freemium mode:**
 > Credentials saved to `~/.42crunch/conf/env`.
@@ -150,6 +165,7 @@ Display confirmation with the value **masked**:
 
 | Situation | Action |
 |---|---|
-| User provides empty token | Re-prompt once; if still empty, stop with a warning that binary is installed but credentials are not configured |
-| User provides empty Platform URL | Use the default `https://demolabs.42crunch.cloud` |
+| User provides empty API Key | Re-prompt once; if still empty, stop with a warning that binary is installed but credentials are not configured |
+| User provides empty Platform URL (Other) | Re-prompt once; if still empty, stop with a warning |
+| User provides empty Freemium Token | Re-prompt once; if still empty, stop with a warning |
 | Cannot write to credentials file | Report the permission error; suggest `chmod u+w ~/.42crunch/conf/env` or creating the directory manually |

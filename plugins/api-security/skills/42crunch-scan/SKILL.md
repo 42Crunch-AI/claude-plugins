@@ -28,13 +28,36 @@ running `42crunch-audit` first.
 1. **Resolve the OAS file.** Use the file currently open in the editor, or
    accept a path provided by the user.
 
-2. **Setup prerequisite** — invoke the `42crunch-setup-v2` skill before
-   proceeding. Setup ensures the `42c-ast` binary is installed and up to date,
-   and that credentials are configured. If the binary cache
-   (`~/.42crunch/.resolved-binary`) already points to a working binary and
-   credentials are already present, setup exits immediately without user
-   interaction. Surface output to the user only if setup requires input or fails.
-   Do not proceed if setup fails.
+2. **Setup prerequisite** — always run silently before proceeding.
+
+   **A. Binary version check (always runs):**
+
+   Resolve the canonical binary path for the current OS:
+   - macOS/Linux: `$HOME/.42crunch/bin/42c-ast`
+   - Windows: `$env:APPDATA\42Crunch\bin\42c-ast.exe`
+
+   Check if the binary exists:
+   - **Missing** → invoke `42crunch-setup-v2` for full setup. Do not proceed if
+     setup fails.
+   - **Present** → run silently:
+     1. Get installed version: `"$BINARY_PATH" --version`
+     2. Fetch manifest: `curl -fsSL https://repo.42crunch.com/downloads/42c-ast-manifest.json`
+     3. Compare installed version to `LATEST_VERSION` for the current platform.
+     4. **Outdated** → silently download and replace the binary using the same
+        install steps as `42crunch-setup-v2` (download → SHA-256 verify → chmod +x).
+        Inform the user: `42c-ast updated from v<old> to v<new>.`
+     5. **Up to date** → proceed silently.
+     6. **Manifest fetch fails** → warn but continue with the installed binary.
+
+   **B. Credentials check (runs after binary is confirmed):**
+
+   ```bash
+   grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
+   ```
+
+   - **Credentials missing** → invoke `42crunch-setup-v2` (credentials flow
+     only). Do not proceed if setup fails.
+   - **Credentials present** → proceed silently to Step 3.
 
 3. **Credential check** — run silently.
 
