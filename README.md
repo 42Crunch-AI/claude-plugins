@@ -110,7 +110,7 @@ The `42c-ast` binary is installed and kept up to date automatically. It is also 
 
 ## Configuration
 
-Credentials are resolved from `~/.42crunch/conf/env` (written by `42crunch-setup`), then environment variables, then a `.env` file (walked upward from the OAS file to the repo root).
+Credentials are read exclusively from `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env` (Windows), written by `42crunch-setup`.
 
 | Variable | Description | Mode |
 |---|---|---|
