@@ -106,7 +106,7 @@ Reads an existing OAS file and produces an `arazzo.yaml` alongside it. Identifie
 - A 42Crunch account — either a **freemium token** or a **platform API key** (`api_*` / `ide_*`)
 - For the `42crunch-scan` skill: a running API server reachable at the URL in `servers[0]` of your OAS (or via the `SCAN42C_HOST` env variable)
 
-The `42c-ast` binary is installed and kept up to date automatically. It is also bundled by the 42Crunch IDE extension for VS Code, IntelliJ, Eclipse, Cursor, and Windsurf.
+The `42c-ast` binary is installed and kept up to date automatically. It is also bundled by the 42Crunch IDE extension for VS Code, Cursor, and Windsurf.
 
 ## Configuration
 
