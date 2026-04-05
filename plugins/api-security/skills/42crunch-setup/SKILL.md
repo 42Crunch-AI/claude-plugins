@@ -46,8 +46,13 @@ The procedure covers, in order:
   - macOS/Linux: `$HOME/.42crunch/bin/42c-ast`
   - Windows: `%APPDATA%\42Crunch\bin\42c-ast.exe`
 
-  If the binary is present and `--version` exits 0 → binary setup is complete.
-  Skip directly to Step 3 (Credential setup).
+  If the binary is **missing or broken** → continue to Step 1.
+
+  If the binary is **present and `--version` exits 0** → continue to Step 2
+  (fetch manifest and compare versions):
+  - Up to date → binary setup is complete. Skip directly to Step 3 (Credential setup).
+  - Outdated (or version unparseable) → continue to Step 3 (download and replace),
+    then skip to credential setup.
 
 - **Step 1** — Detect OS and architecture; resolve `BIN_DIR` and `BINARY_PATH`.
 - **Step 2** — Fetch the manifest, resolve `LATEST_VERSION` / `DOWNLOAD_URL` / `EXPECTED_SHA256`.

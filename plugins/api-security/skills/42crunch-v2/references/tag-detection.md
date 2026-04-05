@@ -1,3 +1,5 @@
+[//]: # (Canonical copy lives in 42crunch-audit/references/tag-detection.md — keep in sync.)
+
 # Tag Detection
 
 ## Purpose
@@ -32,57 +34,58 @@ VS Code-family IDE that may be installed.
 Run this Python snippet to query all databases:
 
 ```python
-import json, os, glob, subprocess
+import json, os, glob, shutil, subprocess
 
 oas_file = '<ABSOLUTE_PATH_TO_OAS_FILE>'  # substitute the real path
 
-ws_dirs = [
-    os.path.expanduser('~/Library/Application Support/Code/User/workspaceStorage'),
-    os.path.expanduser('~/Library/Application Support/Code - Insiders/User/workspaceStorage'),
-    os.path.expanduser('~/Library/Application Support/Cursor/User/workspaceStorage'),
-    os.path.expanduser('~/Library/Application Support/Windsurf/User/workspaceStorage'),
-    os.path.expanduser('~/.config/Code/User/workspaceStorage'),
-    os.path.expanduser('~/.config/Code - Insiders/User/workspaceStorage'),
-    os.path.expanduser('~/.config/Cursor/User/workspaceStorage'),
-    os.path.expanduser('~/.config/Windsurf/User/workspaceStorage'),
-]
-
 found_tag = None
-for ws_dir in ws_dirs:
-    if not os.path.exists(ws_dir):
-        continue
-    for db in glob.glob(f'{ws_dir}/*/state.vscdb'):
-        try:
-            r = subprocess.run(
-                ['sqlite3', db,
-                 "SELECT value FROM ItemTable WHERE key='42Crunch.vscode-openapi';"],
-                capture_output=True, text=True, timeout=5)
-            val = r.stdout.strip()
-            if not val:
-                continue
-            data = json.loads(val)
-            tags = data.get('openapi-42crunch.environment-tags-data', {}).get(oas_file, [])
-            if tags:
-                found_tag = f"{tags[0]['categoryName']}:{tags[0]['tagName']}"
-                break
-        except Exception:
+
+if shutil.which('sqlite3') is None:
+    pass  # sqlite3 not available — skipping workspace DB query
+else:
+    ws_dirs = [
+        os.path.expanduser('~/Library/Application Support/Code/User/workspaceStorage'),
+        os.path.expanduser('~/Library/Application Support/Code - Insiders/User/workspaceStorage'),
+        os.path.expanduser('~/Library/Application Support/Cursor/User/workspaceStorage'),
+        os.path.expanduser('~/Library/Application Support/Windsurf/User/workspaceStorage'),
+        os.path.expanduser('~/.config/Code/User/workspaceStorage'),
+        os.path.expanduser('~/.config/Code - Insiders/User/workspaceStorage'),
+        os.path.expanduser('~/.config/Cursor/User/workspaceStorage'),
+        os.path.expanduser('~/.config/Windsurf/User/workspaceStorage'),
+    ]
+    for ws_dir in ws_dirs:
+        if not os.path.exists(ws_dir):
             continue
-    if found_tag:
-        break
+        for db in glob.glob(f'{ws_dir}/*/state.vscdb'):
+            try:
+                r = subprocess.run(
+                    ['sqlite3', db,
+                     "SELECT value FROM ItemTable WHERE key='42Crunch.vscode-openapi';"],
+                    capture_output=True, text=True, timeout=5)
+                val = r.stdout.strip()
+                if not val:
+                    continue
+                data = json.loads(val)
+                tags = data.get('openapi-42crunch.environment-tags-data', {}).get(oas_file, [])
+                if tags:
+                    found_tag = f"{tags[0]['categoryName']}:{tags[0]['tagName']}"
+                    break
+            except Exception:
+                continue
+        if found_tag:
+            break
 ```
 
 ---
 
-## Step 2 — JetBrains and Eclipse Fallback
+## Step 2 — Project Config File Fallback
 
-For JetBrains IDEs and Eclipse, the tag association is not stored in a SQLite
-database. Check the following locations relative to the project root:
+If no tag was found in Step 1, check for a project-level config file relative
+to the project root:
 
-1. `.42c/conf.yaml` — look for a `tag:` key
-2. `.idea/42crunch.xml` — look for a `<tag>` element (JetBrains only)
+- `.42c/conf.yaml` — look for a `tag:` key
 
-Parse whichever file exists and extract the tag string in
-`<category>:<tagname>` format.
+Parse the file if it exists and extract the tag string in `<category>:<tagname>` format.
 
 ---
 

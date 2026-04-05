@@ -39,7 +39,7 @@ Does **not** run a live scan — use the `42crunch-scan` skill for that.
         `curl -fsSL https://repo.42crunch.com/downloads/42c-ast-manifest.json`
         The manifest is a **JSON array**. Filter entries by the current platform
         `architecture` key (e.g. `darwin-arm64`, `linux-amd64`, `windows-amd64` —
-        see `references/binary-setup.md` Step 1 for the full mapping table).
+        see `42crunch-setup/references/binary-setup.md` Step 1 for the full mapping table).
         Read the `version` field from the matching entry — this is `LATEST_VERSION`.
         If no entry matches the current platform, skip the update check and proceed.
      3. Compare the installed version string to `LATEST_VERSION` for the current platform.
@@ -72,8 +72,8 @@ Does **not** run a live scan — use the `42crunch-scan` skill for that.
      `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>`
      in all commands. Proceed silently.
    - **`API_KEY`** starts with `api_` or `ide_` → **Platform mode**. Read
-     `PLATFORM_HOST` from the same file (default
-     `https://demolabs.42crunch.cloud`). Proceed silently.
+     `PLATFORM_HOST` from the same file (required — run `42crunch-setup` to
+     reconfigure if missing). Proceed silently.
    - **Neither found** → stop with: "I don't see any 42Crunch credentials configured yet. Run `42crunch-setup` to set up your token — it only takes a couple of minutes and I'll walk you through every step."
 
 3. **Resolve the OAS file.**
@@ -168,7 +168,7 @@ If the user declined to apply fixes, note that instead.
 | Variable          | Mode      | Purpose                                   | Default                            |
 |-------------------|-----------|-------------------------------------------|------------------------------------|
 | `API_KEY`         | Platform  | `api_*` or `ide_*` token                 | —                                  |
-| `PLATFORM_HOST`   | Platform  | Platform base URL                         | `https://demolabs.42crunch.cloud`  |
+| `PLATFORM_HOST`   | Platform  | Platform base URL                         | —                                  |
 | `FREEMIUM_TOKEN`  | Freemium  | Base64 token, passed as `--token`         | —                                  |
 
 **Platform mode**: `API_KEY` and `PLATFORM_HOST` set for every command. `--tag` and `--report-sqg` applied when a tag is resolved.

@@ -1,3 +1,5 @@
+[//]: # (Canonical copy lives in 42crunch-scan/references/scan-workflow.md — keep in sync.)
+
 # Scan Workflow
 
 > **Command conventions used throughout this file**

@@ -1,3 +1,5 @@
+[//]: # (Canonical copy lives in 42crunch-audit/references/audit-workflow.md — keep in sync.)
+
 # Audit Workflow
 
 > **Command conventions used throughout this file**
@@ -10,11 +12,25 @@
 
 ## Step 1 — Run the Audit
 
+Resolve a platform-appropriate output directory and create it if it does not exist:
+
+```bash
+# macOS / Linux
+OUTPUT_DIR=/tmp/42c-audit
+mkdir -p "$OUTPUT_DIR"
+```
+
+```powershell
+# Windows
+$OUTPUT_DIR = "$env:TEMP\42c-audit"
+New-Item -ItemType Directory -Force -Path $OUTPUT_DIR | Out-Null
+```
+
 ### Platform mode
 
 ```bash
 API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
-  --output /tmp/42c-audit/report.json \
+  --output "$OUTPUT_DIR/report.json" \
   --output-format json \
   --report-sqg \
   --tag <category>:<tagname> \
@@ -27,15 +43,9 @@ API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
 <binary> audit run \
   --freemium-host stateless.42crunch.com:443 \
   --token <FREEMIUM_TOKEN> \
-  --output /tmp/42c-audit/report.json \
+  --output "$OUTPUT_DIR/report.json" \
   --output-format json \
   <path-to-oas-file>
-```
-
-Create the output directory before running if it does not exist:
-
-```bash
-mkdir -p /tmp/42c-audit
 ```
 
 ### Output files (written to the same directory as `--output`)
@@ -67,8 +77,15 @@ SQG (<sqg-name>): PASSED / FAILED
 Audit Score: <score> / 100  |  Security: <sec-score>/100  |  Data Validation: <data-score>/100
 ```
 
-Before rendering the findings report, prompt the user for session thresholds
-(call `AskUserQuestion` with two questions):
+**Platform mode** — score ≥ 90, add one interpretation line:
+> `Your API scores in the top tier — excellent security posture.`
+Otherwise omit the interpretation line; SQG PASSED/FAILED in the headline is the authoritative result.
+
+**Platform mode only** — when the score crosses from below 70 to 70 or above after fixes are applied, add:
+> `This improvement moves your API from failing to passing the SQG threshold.`
+
+**Freemium mode only** — before rendering the findings report, prompt the user for session
+thresholds (call `AskUserQuestion` with two questions):
 - **Question 1**: `"What minimum score are you targeting for this API?"` — options:
   `["90+ — Excellent", "70 — Good baseline", "50 — Acceptable for now", "Custom — I'll enter a number"]`
   If "Custom" is chosen, call a follow-up `AskUserQuestion` for the numeric value.
@@ -78,15 +95,11 @@ Before rendering the findings report, prompt the user for session thresholds
 Map the severity choice to a numeric threshold: CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1.
 Store as `target_score` and `blocking_severity_threshold` for this session only — do not persist.
 
-**Score interpretation — always include one line immediately after the score headline:**
-
+Then add one score interpretation line:
 - Score ≥ 90: `Your API scores in the top tier — excellent security posture.`
 - Score ≥ target and < 90: `Your API meets your target score. A few improvements could push it higher.`
 - Score within 10 of target (but below): `Your API is approaching your target score — the blocking issues below are holding it back.`
 - Score more than 10 below target: `Your API score is below your target. The issues below must be fixed.`
-
-**Platform mode only** — when the score crosses from below 70 to 70 or above after fixes are applied, add:
-> `This improvement moves your API from failing to passing the SQG threshold.`
 
 ### Parsing reference
 

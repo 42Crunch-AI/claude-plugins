@@ -77,8 +77,8 @@ running `42crunch-audit` first.
      `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>`
      in all commands. Proceed silently.
    - **`API_KEY`** starts with `api_` or `ide_` → **Platform mode**. Read
-     `PLATFORM_HOST` from the same file (default
-     `https://demolabs.42crunch.cloud`). Proceed silently.
+     `PLATFORM_HOST` from the same file (required — run `42crunch-setup` to
+     reconfigure if missing). Proceed silently.
    - **Neither found** → stop with: "I don't see any 42Crunch credentials configured yet. Run `42crunch-setup` to set up your token — it only takes a couple of minutes and I'll walk you through every step."
 
 3. **Resolve the OAS file.**
@@ -155,7 +155,7 @@ If the user declined to apply fixes or no issues were found, note that instead.
 | Variable          | Mode      | Purpose                                   | Default                            |
 |-------------------|-----------|-------------------------------------------|------------------------------------|
 | `API_KEY`         | Platform  | `api_*` or `ide_*` token                 | —                                  |
-| `PLATFORM_HOST`   | Platform  | Platform base URL                         | `https://demolabs.42crunch.cloud`  |
+| `PLATFORM_HOST`   | Platform  | Platform base URL                         | —                                  |
 | `FREEMIUM_TOKEN`  | Freemium  | Base64 token, passed as `--token`         | —                                  |
 | `SCAN42C_HOST`    | Both      | Scan target base URL (overrides OAS `servers[0]`) | None                       |
 
