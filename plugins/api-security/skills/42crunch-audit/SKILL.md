@@ -20,10 +20,7 @@ Does **not** run a live scan — use the `42crunch-scan` skill for that.
 
 ## Entry Point
 
-1. **Resolve the OAS file.** Use the file currently open in the editor, or
-   accept a path provided by the user.
-
-2. **Setup prerequisite** — always run before proceeding.
+1. **Setup prerequisite** — always run before proceeding.
 
    **A. Binary version check (always runs):**
 
@@ -60,9 +57,9 @@ Does **not** run a live scan — use the `42crunch-scan` skill for that.
 
    - **Credentials missing** → invoke `42crunch-setup` (credentials flow
      only). Do not proceed if setup fails.
-   - **Credentials present** → proceed silently to Step 3.
+   - **Credentials present** → proceed silently to Step 2.
 
-3. **Credential check** — run silently.
+2. **Credential check** — run silently.
 
    Read `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env`
    (Windows) — the config written by `42crunch-setup`:
@@ -78,6 +75,16 @@ Does **not** run a live scan — use the `42crunch-scan` skill for that.
      `PLATFORM_HOST` from the same file (default
      `https://demolabs.42crunch.cloud`). Proceed silently.
    - **Neither found** → stop with: "I don't see any 42Crunch credentials configured yet. Run `42crunch-setup` to set up your token — it only takes a couple of minutes and I'll walk you through every step."
+
+3. **Resolve the OAS file.**
+   - If the user provided a path → use it.
+   - If exactly one OAS file (`.json` or `.yaml` containing `openapi:`) is open in the editor → use it.
+   - If **multiple** OAS files are open → call `AskUserQuestion`:
+     - **question**: `"I see multiple OpenAPI files open. Which one should I audit?"` — list each filename as an option.
+   - If **no** OAS file can be resolved → call `AskUserQuestion`:
+     - **question**: `"I couldn't find an OpenAPI file to audit. Would you like me to generate one from your source code first?"` — options: `["Yes — generate from source code", "No — I'll provide a path"]`
+     - If **Yes** → invoke the `code-to-oas` skill, then resume with the generated file.
+     - If **No** → ask the user to provide the file path and wait.
 
 4. **Tag detection** — platform mode only. Run silently. Read
    `references/tag-detection.md`. In freemium mode, skip tag detection
@@ -128,8 +135,7 @@ Audit Complete
   Score change:   <initial-score> → <score>  (<delta>)  |  Data: <initial-data> → <data-score>  (<data-delta>)   ← omit if no fixes applied
   SQG:            PASSED  (Security-Guardrails — your org's security quality gate is met)    ← platform mode, passed
   SQG:            FAILED  (Security-Guardrails — the quality gate is not met; fixes above are required)    ← platform mode, failed
-  SQG:            PASSED  (Freemium — score ≥ 70 and no MEDIUM+ issues)    ← freemium mode, passed
-  SQG:            FAILED  (Freemium — score < 70 or MEDIUM+ issues present)    ← freemium mode, failed
+  SQG:            N/A  (Freemium — no automated gate; user-defined thresholds applied this session)    ← freemium mode
   Mode:           Platform / Freemium
   Tag:            <category>:<tagname>             ← platform mode only
   Issues fixed:   2 SQG-blocking  (0 security · 2 data validation)
@@ -167,4 +173,4 @@ If the user declined to apply fixes, note that instead.
 
 **Platform mode**: `API_KEY` and `PLATFORM_HOST` set for every command. `--tag` and `--report-sqg` applied when a tag is resolved.
 
-**Freemium mode**: `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>` used for every command. No `--tag` or `--report-sqg`. Hardcoded SQG: score ≥ 70, issues with criticality ≥ MEDIUM are blocking.
+**Freemium mode**: `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>` used for every command. No `--tag` or `--report-sqg`. No automated SQG gate — user is prompted for a target score and blocking severity threshold at the start of the audit flow; these are session-scoped only.

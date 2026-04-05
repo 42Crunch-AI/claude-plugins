@@ -42,7 +42,7 @@ Credentials are stored in `~/.42crunch/conf/env` (file permissions `600` on macO
 
 ### `42crunch-audit` — Static OAS Security Audit
 
-Runs a static analysis of an OpenAPI Specification file and produces a scored report (0–100). Before running, silently checks that the `42c-ast` binary is installed and up to date (auto-updating if needed) and that credentials are configured — invoking `42crunch-setup` automatically if either is missing.
+Runs a static analysis of an OpenAPI Specification file and produces a scored report (0–100). Verifies the environment first — silently confirms the `42c-ast` binary is installed and up to date (auto-updating if needed) and that credentials are configured, invoking `42crunch-setup` automatically if either is missing — then resolves the OAS file to analyse.
 
 Findings are classified into three tiers:
 
@@ -54,7 +54,9 @@ After presenting findings, Claude asks for your explicit consent before applying
 
 **Platform mode:** SQG is enforced from the platform policy. Tag detection runs silently to locate the API collection.
 
-**Freemium mode:** SQG is enforced locally (score ≥ 70, no MEDIUM+ issues). No tag detection.
+**Freemium mode:** No automated SQG gate. After the audit runs, Claude asks you to set a target score and blocking severity for the session. No tag detection.
+
+If no OAS file is open or provided, Claude offers to generate one from your source code using the `code-to-oas` skill before continuing.
 
 **Trigger phrases:** "run audit", "42crunch audit", "fix audit issues", "SQG audit", "audit score"
 
@@ -62,11 +64,13 @@ After presenting findings, Claude asks for your explicit consent before applying
 
 ### `42crunch-scan` — Live Conformance & Authorization Scan
 
-Runs a live test against a running API server. Performs the same silent binary and credential checks as the audit skill. Generates or validates a `scanconf.json` configuration, automatically identifies BOLA and BFLA candidates, builds dependency chains for operations that require IDs from prior calls, and runs a full fuzzing scan. Reports authorization failures and conformance issues, then offers to apply OAS fixes after consent.
+Runs a live test against a running API server. Verifies the environment first (binary + credentials, same as the audit skill), then resolves the OAS file. Generates or validates a `scanconf.json` configuration, automatically identifies BOLA and BFLA candidates, builds dependency chains for operations that require IDs from prior calls, and runs a full fuzzing scan. Reports authorization failures and conformance issues, then offers to apply OAS fixes after consent.
 
 **Platform mode:** SQG is enforced from the platform policy.
 
 **Freemium mode:** No SQG enforcement for scan. All findings are presented informally; the user decides which to fix.
+
+If no OAS file is open or provided, Claude offers to generate one from your source code using the `code-to-oas` skill before continuing.
 
 **Trigger phrases:** "run scan", "conformance test", "BOLA test", "BFLA test", "scan config"
 
@@ -74,7 +78,7 @@ Runs a live test against a running API server. Performs the same silent binary a
 
 ### `42crunch-v2` — Full Audit + Scan Pipeline
 
-Orchestrates the Audit and Scan skills in sequence as Phase 1 and Phase 2. Each phase requires separate user consent. Performs the same silent binary and credential checks before starting. Produces a combined summary at the end covering both phases.
+Orchestrates the Audit and Scan skills in sequence as Phase 1 and Phase 2. Verifies the environment (binary + credentials) and resolves the OAS file before starting. Each phase requires separate user consent. Produces a combined summary at the end covering both phases.
 
 **Trigger phrases:** "run audit and scan", "full 42crunch pipeline", "SQG"
 
@@ -121,7 +125,7 @@ Credentials are never printed in plaintext after entry. The env file is stored w
 
 1. **Install the plugin** — point Claude Code at this marketplace repository.
 2. **Run setup** — ask Claude: *"set up 42crunch"*. Claude will install the `42c-ast` binary and walk you through credential configuration.
-3. **Audit your API** — ask Claude: *"run a 42Crunch audit on my OpenAPI spec"*.
+3. **Audit your API** — ask Claude: *"run a 42Crunch audit on my OpenAPI spec"*. If you don't have an OAS file yet, Claude will offer to generate one from your source code first.
 4. **Fix issues** — Claude presents findings and asks your consent before applying any changes.
 5. **Scan your API** — ask Claude: *"run a conformance scan"* against your running server.
 

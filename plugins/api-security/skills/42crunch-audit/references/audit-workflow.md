@@ -62,26 +62,31 @@ Audit Score: <score> / 100  |  Security: <sec-score>/100  |  Data Validation: <d
 SQG (<sqg-name>): PASSED / FAILED
 ```
 
-**Freemium mode** (no `sqg.json` — apply hardcoded SQG rules):
+**Freemium mode** (no `sqg.json`):
 ```
 Audit Score: <score> / 100  |  Security: <sec-score>/100  |  Data Validation: <data-score>/100
-SQG (Freemium): PASSED / FAILED
 ```
+
+Before rendering the findings report, prompt the user for session thresholds
+(call `AskUserQuestion` with two questions):
+- **Question 1**: `"What minimum score are you targeting for this API?"` — options:
+  `["90+ — Excellent", "70 — Good baseline", "50 — Acceptable for now", "Custom — I'll enter a number"]`
+  If "Custom" is chosen, call a follow-up `AskUserQuestion` for the numeric value.
+- **Question 2**: `"What is the lowest severity you want treated as a blocking issue?"` — options:
+  `["CRITICAL only", "HIGH and above", "MEDIUM and above", "All findings (including LOW)"]`
+
+Map the severity choice to a numeric threshold: CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1.
+Store as `target_score` and `blocking_severity_threshold` for this session only — do not persist.
 
 **Score interpretation — always include one line immediately after the score headline:**
 
 - Score ≥ 90: `Your API scores in the top tier — excellent security posture.`
-- Score 70–89: `Your API passes the SQG threshold. A few improvements could push it higher.`
-- Score 50–69: `Your API is approaching the SQG threshold — the blocking issues below are holding it back.`
-- Score < 50: `Your API score is below the SQG threshold. The issues below must be fixed to unblock the scan.`
+- Score ≥ target and < 90: `Your API meets your target score. A few improvements could push it higher.`
+- Score within 10 of target (but below): `Your API is approaching your target score — the blocking issues below are holding it back.`
+- Score more than 10 below target: `Your API score is below your target. The issues below must be fixed.`
 
-When the score crosses from below 70 to 70 or above after fixes are applied, add:
+**Platform mode only** — when the score crosses from below 70 to 70 or above after fixes are applied, add:
 > `This improvement moves your API from failing to passing the SQG threshold.`
-
-Freemium SQG rules (applied by the skill, not the platform):
-- Score **< 70** → SQG FAILED
-- Any issue with criticality **MEDIUM (2), HIGH (3), or CRITICAL (4)** → SQG-blocking (treated as 🔴)
-- Issues with criticality LOW (1) or INFO (0) → surfaced only, not blocking
 
 ### Parsing reference
 
@@ -104,10 +109,11 @@ if sqg:
     if sqg["acceptance"] != "yes":
         blocking_ids = set(sqg["sqgsDetail"][0]["directives"].get("issueRules", []))
 else:
-    # Freemium mode: issues with criticality >= MEDIUM are blocking
+    # Freemium mode: use user-defined blocking_severity_threshold from the
+    # session threshold prompt (CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1)
     for section in ["security", "data"]:
         for issue_id, issue_data in d[section]["issues"].items():
-            if issue_data["criticality"] >= 2:  # MEDIUM=2, HIGH=3, CRITICAL=4
+            if issue_data["criticality"] >= blocking_severity_threshold:
                 blocking_ids.add(issue_id)
 
 # Iterate issues across both sections
@@ -195,6 +201,17 @@ Only advance to the next fix after the user confirms the current one.
 Do **not** offer to fix non-blocking issues at this stage — only the 🔴 items.
 Only proceed to Step 4 after the user explicitly confirms.
 
+**API-first vs code-first — per-issue handling:**
+For findings that represent a **spec/implementation mismatch** (e.g. `additionalproperties-true`
+where the server actually returns those fields, HTTP vs HTTPS in `servers`, undocumented security
+schemes, or response bodies wider than the schema), do **not** assume the OAS is the source of
+truth. Instead, present the choice explicitly before applying the fix:
+- Call `AskUserQuestion`:
+  - **question**: `"For [issue title] at [OAS path]: the spec and implementation disagree. Which should be the source of truth?"` — options: `["Fix the OAS to match the implementation", "Fix the implementation to match the OAS", "Skip this one"]`
+- Apply the fix in whichever direction the user chooses.
+- Pure security issues (missing patterns, unbounded arrays, undocumented 403/429 responses, etc.)
+  that have no implementation-side equivalent do not need this prompt — just propose the OAS fix.
+
 ---
 
 ## Step 4 — Context-Aware Fix Analysis
@@ -212,8 +229,8 @@ For each SQG-blocking issue the user has approved:
 After all fixes are applied, re-run the audit (**Step 1**) to confirm the SQG
 now passes:
 - **Platform mode**: confirm `sqg["acceptance"]` is `"yes"` in the new `sqg.json`.
-- **Freemium mode**: confirm the new score is ≥ 70 and no issues with
-  criticality ≥ MEDIUM remain in `todo.json`.
+- **Freemium mode**: confirm the new score meets `target_score` and no issues
+  with criticality ≥ `blocking_severity_threshold` remain in `todo.json`.
 
 After confirming the SQG passes, compute the before/after score deltas and
 pass them to the final summary:
