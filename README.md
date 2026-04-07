@@ -141,7 +141,7 @@ Credentials are never printed in plaintext after entry. The env file is stored w
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+Apache 2.0 — see [LICENSE](LICENSE) for details.
 
 ## Links
 

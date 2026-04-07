@@ -9,7 +9,7 @@
   },
   "homepage": "https://docs.42crunch.com",
   "repository": "https://github.com/42c-presales/claude-plugin",
-  "license": "MIT",
+  "license": "Apache 2.0",
   "category": "security",
   "keywords": [
     "openapi",
