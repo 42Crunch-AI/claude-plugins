@@ -60,28 +60,19 @@ running `42crunch-audit` first.
    grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
    ```
 
-   - **Credentials missing** → invoke `42crunch-setup` (credentials flow
-     only). Do not proceed if setup fails.
-   - **Credentials present** → proceed silently to Step 2.
-
-2. **Credential check** — run silently.
-
-   Read `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env`
-   (Windows) — the config written by `42crunch-setup`:
-
-   ```bash
-   grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
-   ```
-
    - **`FREEMIUM_TOKEN`** is set → **Freemium mode**. Use
      `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>`
      in all commands. Proceed silently.
    - **`API_KEY`** starts with `api_` or `ide_` → **Platform mode**. Read
      `PLATFORM_HOST` from the same file (required — run `42crunch-setup` to
      reconfigure if missing). Proceed silently.
-   - **Neither found** → stop with: "I don't see any 42Crunch credentials configured yet. Run `42crunch-setup` to set up your token — it only takes a couple of minutes and I'll walk you through every step."
+   - **Neither found** → call `AskUserQuestion`:
+     - **question**: `"I don't see any 42Crunch credentials configured yet. I can walk you through setup now, or you can run 42crunch-setup manually when you're ready."`
+     - **options**: `["Set up now", "Cancel — I'll run 42crunch-setup manually"]`
+     - If **Set up now** → invoke `42crunch-setup` (full setup). Do not proceed if setup fails.
+     - If **Cancel** → stop.
 
-3. **Resolve the OAS file.**
+2. **Resolve the OAS file.**
    - If the user provided a path → use it.
    - If exactly one OAS file (`.json` or `.yaml` containing `openapi:`) is open in the editor → use it.
    - If **multiple** OAS files are open → call `AskUserQuestion`:
@@ -91,27 +82,88 @@ running `42crunch-audit` first.
      - If **Yes** → invoke the `code-to-oas` skill, then resume with the generated file.
      - If **No** → ask the user to provide the file path and wait.
 
+3. **Resolve the scan target URL.**
+
+   Read `servers[0].url` from the OAS file.
+
+   - If `SCAN42C_HOST` environment variable is set → announce silently:
+     > "Using scan target from SCAN42C_HOST: `<url>`"
+     Store as `SCAN_TARGET_URL` and proceed.
+   - If not set → call `AskUserQuestion`:
+     - **question**: `"The OAS points to <servers[0].url> as the API target. Is this the right URL to scan against?"` — options: `["Yes — use this URL", "No — I'll provide a different URL"]`
+     - If **No** → ask the user to provide the URL and store it as `SCAN_TARGET_URL`.
+     - If **Yes** → store `servers[0].url` as `SCAN_TARGET_URL`.
+
+   **Reachability check** — run immediately after `SCAN_TARGET_URL` is confirmed.
+   Uses a two-stage probe to distinguish "server is down" from "wrong base URL".
+
+   **Stage 1** — probe the base URL:
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" --max-time 5 <SCAN_TARGET_URL>/
+   ```
+   - **2xx, 3xx, 401, 403, or 405** → API is reachable. Proceed silently.
+   - **Connection refused or timeout** → call `AskUserQuestion`:
+     - **question**: `"I couldn't reach <SCAN_TARGET_URL> — the connection timed out or was refused. How would you like to proceed?"`
+     - **options**: `["Try a different URL", "Continue anyway — the API may be temporarily down", "Cancel"]`
+     - If **Try a different URL** → ask for new URL, store as `SCAN_TARGET_URL`, re-run from Stage 1.
+     - If **Continue anyway** → proceed with warning noted.
+     - If **Cancel** → stop.
+   - **404** → ambiguous (server may be up but nothing is mounted at root). Proceed to Stage 2.
+
+   **Stage 2** — probe the first simple OAS path (only reached when Stage 1 returns 404):
+   Find the first `GET` path in the OAS that has no required path parameters. Strip any
+   `{param}`-style segments and probe:
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" --max-time 5 <SCAN_TARGET_URL><first_simple_path>
+   ```
+   - **Any HTTP response** → server is up; root just has no handler. Proceed silently.
+   - **Connection refused or timeout** → same `AskUserQuestion` as Stage 1.
+   - **404 again** → call `AskUserQuestion`:
+     - **question**: `"The server responded but both / and <path> returned 404 — the base URL may be incorrect (the API may be mounted at a different prefix). How would you like to proceed?"`
+     - **options**: `["Try a different URL", "Continue anyway", "Cancel"]`
+     - If **Try a different URL** → ask for new URL, store as `SCAN_TARGET_URL`, re-run from Stage 1.
+     - If **Continue anyway** → proceed with warning noted.
+     - If **Cancel** → stop.
+
 4. **Tag detection** — platform mode only. Run silently. Read
    `references/tag-detection.md`. In freemium mode, skip tag detection
    entirely. If a tag is found, announce it to the user before asking for
    permission. If no tag is found, stop as described in
    `references/tag-detection.md`.
 
-5. **Ask for permission.** Call `AskUserQuestion`:
-   - **question**: `"Ready to run a 42Crunch Scan against the live API to test conformance and authorization on <filename>. Shall I proceed?"`
-   - **options**: `["Yes, proceed", "No, cancel"]`
+5. **OAS analysis for scan preview** — run silently before asking permission.
 
-6. **Execute the Scan.** Read `references/scan-workflow.md`.
-   The workflow sets up the scan config, collects credentials, classifies
-   operations, validates happy paths, runs the full scan, and presents a
-   **risk-classified findings report** (Authorization failures /
-   SQG-blocking conformance / informational conformance). It then pauses and
-   asks the user to consent before applying any OAS changes.
+   Read the OAS file and collect:
+   - Total operation count
+   - Auth scheme types from `securitySchemes` (Bearer/JWT, API Key, Basic, OAuth2)
+   - BOLA candidate count: operations where the path has `{…Id}`, `{…Key}`, `{…Ref}`, or similar resource-ID placeholders AND the method is GET, PUT, PATCH, or DELETE
+   - Whether the OAS contains sample data: any operation with `example`, `examples`, or `default` values on its request body or parameter schemas
+
+6. **Ask for permission to configure the scan.** Call `AskUserQuestion`:
+   - **question**: (show the scan preview first, then ask)
+     ```
+     Ready to configure the scan?
+       Target:   <SCAN_TARGET_URL>  ✓ reachable  /  ⚠ reachability unknown
+       OAS:      <filename>  (<N> operations)
+       Auth:     <scheme types>  [+  second user needed — <N> BOLA candidate(s)]
+       Samples:  OAS has sample data  /  No samples — you'll need to provide test data
+       Tag:      <category>:<tagname>           ← platform mode only
+       Mode:     Platform / Freemium
+     ```
+     `"I'm ready to start configuring the scan. I'll ask for credentials, classify your operations, and set up test scenarios — then run a happy path validation before the full scan. Shall I proceed?"`
+   - **options**: `["Yes, let's configure", "No, cancel"]`
+
+7. **Execute the Scan.** Read `references/scan-workflow.md`.
+   The workflow sets up the scan config, collects credentials, gathers test data,
+   classifies operations, validates happy paths, then asks for permission again
+   before running the full scan. It presents a **risk-classified findings report**
+   (Authorization failures / SQG-blocking conformance / informational conformance)
+   and pauses for consent before applying any OAS changes.
 
    **Freemium mode**: no SQG is enforced for scan. Present all findings for
    information. The user decides which (if any) to fix.
 
-7. **Present the final scan summary** (see Output Format below).
+8. **Present the final scan summary** (see Output Format below).
 
 Only continue after explicit user confirmation at each permission prompt.
 

@@ -64,7 +64,17 @@ If no OAS file is open or provided, Claude offers to generate one from your sour
 
 ### `42crunch-scan` — Live Conformance & Authorization Scan
 
-Runs a live test against a running API server. Verifies the environment first (binary + credentials, same as the audit skill), then resolves the OAS file. Generates or validates a `scanconf.json` configuration, automatically identifies BOLA and BFLA candidates, builds dependency chains for operations that require IDs from prior calls, and runs a full fuzzing scan. Reports authorization failures and conformance issues, then offers to apply OAS fixes after consent.
+Runs a live test against a running API server. Verifies the environment first (binary + credentials), resolves the OAS file, then confirms the scan target URL — prompting you if the `servers[0].url` value needs adjusting — and immediately checks reachability before any configuration begins.
+
+Once the target is confirmed, Claude performs a quick OAS analysis (operation count, auth schemes, BOLA candidates, sample data presence) and presents a scan preview before asking for permission to configure the scan. Configuration collects credentials, identifies BOLA/BFLA candidates, asks whether to use OAS sample data or a Postman collection for test data, classifies every operation (Standalone / Dependency / Manual-data / Throwaway-user), and builds scenario chains. A happy path validation run follows; after all happy paths pass Claude asks for explicit consent before running the full fuzzing scan.
+
+Findings are classified into three tiers:
+
+- **Authorization failures** (red) — BOLA/BFLA confirmed; always a fix candidate
+- **SQG-Blocking conformance** (orange) — must fix to pass the Security Quality Gate
+- **Informational conformance** (yellow) — surfaced for review; not auto-fixed
+
+Claude asks for your consent before applying any OAS changes.
 
 **Platform mode:** SQG is enforced from the platform policy.
 
@@ -78,7 +88,7 @@ If no OAS file is open or provided, Claude offers to generate one from your sour
 
 ### `42crunch-v2` — Full Audit + Scan Pipeline
 
-Orchestrates the Audit and Scan skills in sequence as Phase 1 and Phase 2. Verifies the environment (binary + credentials) and resolves the OAS file before starting. Each phase requires separate user consent. Produces a combined summary at the end covering both phases.
+Orchestrates the Audit and Scan skills in sequence as Phase 1 and Phase 2. Verifies the environment (binary + credentials), resolves the OAS file, and confirms the scan target URL with a reachability check — all before Phase 1 begins. Each phase requires separate user consent. Before Phase 2, Claude runs a silent OAS analysis and presents a scan configuration preview (target URL, operation count, auth schemes, BOLA candidates, sample data availability) so you know exactly what the scan setup will involve. Produces a combined summary at the end covering both phases.
 
 **Trigger phrases:** "run audit and scan", "full 42crunch pipeline", "SQG"
 

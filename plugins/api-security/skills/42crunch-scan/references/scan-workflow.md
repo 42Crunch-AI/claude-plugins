@@ -72,28 +72,25 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists.
 - If valid: store `CONF_FILE=.42c/scan/<alias>/scanconf.json` and proceed to Step 2.
 - If invalid: surface the error to the user and stop.
 
-### 1c — Set target URL
+### 1c — Write target URL to config
 
-Use `SCAN42C_HOST` environment variable if set, otherwise `servers[0].url` from the OAS file.
-Write it into `environments.default.variables.host` in `CONF_FILE`.
+Write `SCAN_TARGET_URL` (confirmed in SKILL.md Step 3) into
+`environments.default.variables.host` in `CONF_FILE`. No URL resolution or
+user prompting is needed here — the URL was already confirmed and reachability
+checked before the workflow started.
 
 ---
 
 ## Step 2 — Authentication Setup
 
-Read the OAS `securitySchemes` and global/operation `security` definitions.
+Read the OAS `securitySchemes` and global/operation `security` definitions to
+determine the auth scheme, then collect credentials using the per-scheme flows
+below. Every credential field is collected via `AskUserQuestion` — never
+generate, guess, or suggest credential values.
 
-| Scheme type | What to collect |
-|---|---|
-| Bearer / JWT | Token for a primary test user |
-| API Key | Key value; confirm header or query param name |
-| Basic Auth | Username and password |
-| OAuth2 | Token endpoint from OAS; ask for client credentials or access token |
-| Login endpoint detected (`POST /login`, `POST /auth/token`, `POST /auth/login`, etc.) | Offer to acquire a token dynamically via the login flow; ask for credentials to supply to the login request |
-
-**BOLA/BFLA second-user identification (do this now, not later):**
-Before asking for any credentials, first identify all BOLA/BFLA candidates in
-the OAS. Flag every operation where ALL of the following are true:
+**BOLA/BFLA second-user identification (do this before collecting any credentials):**
+Identify all BOLA/BFLA candidates in the OAS. Flag every operation where ALL
+of the following are true:
 - The path contains at least one `{…Id}`, `{…Key}`, `{…Ref}`, or equivalent
   resource-ID placeholder.
 - The HTTP method is GET, PUT, PATCH, or DELETE (i.e. the operation reads or
@@ -105,23 +102,58 @@ is just as much a BOLA candidate as a DELETE or GET on the same path.
 Flag privileged operations (admin-only actions) separately as BFLA candidates
 even if they have no path ID parameter.
 
-Name all candidates in the credential collection prompt so the user knows why
-two users are needed. Call `AskUserQuestion`:
-- **question**: `"I found DELETE /{resource}/{id}, GET /{resource}/{id}, and PATCH /{resource}/{id} as BOLA candidates. I'll need credentials for a second user who should NOT have access to the first user's resources. Can you provide a token or login details for this second user?"`
+This determines whether a second user (User 2) is needed before credential
+prompts are shown, so the user understands why they're being asked for two sets.
 
-If elevated privileges are also needed (BFLA), call a separate `AskUserQuestion`
-with a clear label (e.g. "admin user").
+### Per-scheme credential collection
 
-Do not proceed until at least one valid credential set is confirmed.
+**Login endpoint detected (`POST /login`, `POST /auth/token`, `POST /auth/login`, etc.) — most common:**
 
-### Test data / seed check
+Announce which endpoint will be used to acquire the token, then call two separate `AskUserQuestion` prompts:
 
-Call `AskUserQuestion` before building the scan config:
-- **question**: `"Does the API need pre-seeded database records (accounts, users, reference data) to exist before scanning? If the server is freshly started or the database was wiped, happy paths will fail with 404 / 401 even with correct credentials."`
-- **options**: `["Yes — I'll seed first", "No — it's ready as-is"]`
+1. `AskUserQuestion` — **question**: `"I'll acquire User 1's token by calling <loginEndpoint>. What is the username or email for User 1?"` — store the answer as `{{username}}` in `environments.default.variables`.
+2. `AskUserQuestion` — **question**: `"What is the password for User 1?"` — store as `{{password}}` in `environments.default.variables`.
 
-If yes — call `AskUserQuestion` — **question**: `"Please share the seed command or procedure so I can record it for re-use after destructive scan operations:"` — confirm it is run before proceeding. Record the seed command so it can be re-run if destructive
-operations (see Step 3 Class D) delete test data during a scan run.
+If BOLA candidates were found, collect User 2 credentials immediately after User 1:
+
+3. `AskUserQuestion` — **question**: `"I also need credentials for User 2, who should NOT have access to User 1's resources (used for BOLA testing). What is the username or email for User 2?"` — store as `{{user2Username}}`.
+4. `AskUserQuestion` — **question**: `"What is the password for User 2?"` — store as `{{user2Password}}`.
+
+If BFLA candidates were found, collect the admin user credentials as well:
+
+5. `AskUserQuestion` — **question**: `"I need credentials for an admin user to test privileged operations (BFLA). What is the username or email for the admin user?"` — store as `{{adminUsername}}`.
+6. `AskUserQuestion` — **question**: `"What is the password for the admin user?"` — store as `{{adminPassword}}`.
+
+**Bearer / JWT (no login endpoint in OAS — token provided directly):**
+
+1. `AskUserQuestion` — **question**: `"I need a bearer token for User 1. Do you have one ready, or would you like to acquire one from a specific API endpoint first?"` — **options**: `["I have a token — I'll paste it", "I need to acquire one — I'll specify the endpoint"]`
+   - If **paste**: `AskUserQuestion` — **question**: `"Please paste the bearer token for User 1:"` — store as `{{user1Token}}`.
+   - If **acquire**: ask which endpoint to call, then collect username + password as in the login endpoint flow above.
+
+If BOLA candidates were found:
+
+2. `AskUserQuestion` — **question**: `"Do you have a token for User 2 (who should NOT have access to User 1's resources), or would you like to acquire one?"` — **options**: `["I have a token — I'll paste it", "I need to acquire one"]`
+   - Follow the same pattern as User 1.
+
+**API Key:**
+
+1. `AskUserQuestion` — **question**: `"Please provide the API key for User 1:"` — store as `{{apiKey}}`.
+   - The header or query param name is read from `securitySchemes[*].name` and `in` in the OAS. Only ask if ambiguous.
+
+**Basic Auth:**
+
+1. `AskUserQuestion` — **question**: `"What is the username or email for User 1?"` — store as `{{username}}`.
+2. `AskUserQuestion` — **question**: `"What is the password for User 1?"` — store as `{{password}}`.
+
+If BOLA/BFLA candidates were found, collect additional users following the same two-question pattern, labelled "User 2" or "admin user" as appropriate.
+
+**OAuth2:**
+
+1. `AskUserQuestion` — **question**: `"For OAuth2, do you have an access token ready, or should I use the token endpoint from the OAS (<tokenEndpoint>)?"` — **options**: `["I have an access token — I'll paste it", "Use the token endpoint — I'll provide client credentials"]`
+   - If **paste**: `AskUserQuestion` — **question**: `"Please paste the access token for User 1:"` — store as `{{accessToken}}`.
+   - If **client credentials**: collect `client_id` and `client_secret` with separate `AskUserQuestion` calls.
+
+Do not proceed until at least the primary user's credentials are confirmed.
 
 ### Writing credential acquisition flows into `authenticationDetails`
 
@@ -226,11 +258,65 @@ in sequence. The token capture goes on the last step:
 
 ---
 
+## Step 2.5 — Test Data
+
+Before classifying operations, establish the source of test data for the scan.
+
+**Check the OAS for existing sample data**: scan all operation request bodies and
+parameters for `example`, `examples`, or `default` values on their schemas.
+
+Call `AskUserQuestion`:
+
+**If OAS has sample data:**
+- **question**: `"Do you have test data to use for testing, or shall I use the samples present in the OAS?"`
+- **options**: `["Use OAS samples", "I have my own test data — I'll provide a Postman collection"]`
+
+**If OAS has NO sample data:**
+- **question**: `"The OAS doesn't include sample values for request bodies or parameters. Do you have test data available, or will you provide values manually as we go?"`
+- **options**: `["I'll provide a Postman collection", "I'll provide values manually as needed"]`
+
+**If the user selects a Postman collection:**
+1. Call `AskUserQuestion` — **question**: `"Please share the path to your Postman collection file (v2.1 JSON format)."` — wait for the file path.
+2. Parse the Postman v2.1 JSON.
+3. Build a test data lookup table keyed by HTTP method + path pattern:
+   ```
+   { "<METHOD> <path>": { body: {...}, pathVars: {...}, queryParams: {...} } }
+   ```
+4. Announce: `"Loaded test data from Postman collection: <N> request(s) matched."` 
+5. This table is used in Step 3 (classification) and Step 4 (scenario building) to
+   auto-populate Class-C operations — no reactive import needed in Step 5.
+
+If re-seeding is needed after a destructive scan operation (Step 3 Class D), use
+the seed command captured here. If no seed command was provided and Class-D
+operations exist, note to the user that they may need to manually restore test
+records between scan runs if the primary user's account is deleted.
+
+---
+
 ## Step 3 — Operation Classification
 
 Before writing any scenario into the scan config, analyse every operation in
-the OAS and classify it. Present the full table to the user and wait for
-confirmation before proceeding.
+the OAS and classify it. Before presenting the table, give the user a brief
+explanation of the four classes so they can meaningfully validate the results.
+
+### Classification overview
+
+Output this explanation before the table:
+
+```
+I've classified every API operation into one of four testing modes:
+
+  A — Standalone      Runs with sample or generated data — no setup needed.
+  B — Dependency      Needs a dynamic ID from a prior operation
+                      (e.g. create a resource first, then fetch it by ID).
+  C — Manual data     Requires values I can't generate automatically —
+                      I'll use your Postman collection or ask you to provide them.
+  D — Throwaway user  Destroys the currently authenticated account
+                      (e.g. DELETE /account) — I'll use a temporary test user
+                      to keep your primary session intact.
+
+Here is how I've classified your operations:
+```
 
 ### Classification categories
 
@@ -258,9 +344,8 @@ Detection heuristic:
 
 **C — User-data-required**
 Inputs cannot be resolved automatically and no plausible creator operation
-exists. Ask the user to either:
-- Provide the values directly (paste into chat)
-- Point to a Postman collection or JSON fixtures file (see Postman import below)
+exists. If a Postman collection was provided in Step 2.5, use values from the
+lookup table. Otherwise ask the user to provide the values directly.
 
 **D — Throwaway-user required**
 The operation destroys the currently authenticated principal's own resource
@@ -368,10 +453,10 @@ block rather than repeating it in every scenario:
 
 ### Class-C: user-provided data
 
-If the user provides raw values, inject them as static literals in the
+If a Postman collection was imported in Step 2.5, look up the operation in
+the test data table and inject the extracted values as static literals in the
 `paths` / `queries` / `requestBody.json` fields of the operation's `request`
-block. If the user provides a Postman collection, see the Postman import
-procedure in Step 5.
+block. If the operation is not in the table, ask the user to paste the values.
 
 ### Class-D: throwaway-user pattern
 
@@ -436,8 +521,6 @@ The last step overrides the primary user's token variable (e.g. `user1Token`)
 with `throwawayToken` so the `AccessToken/User1` credential sends the
 throwaway's JWT. User1 remains untouched.
 
-If re-seeding is needed after a scan run, use the seed command captured in Step 2.
-
 ---
 
 ## Step 5 — Happy Path Validation Run
@@ -472,7 +555,7 @@ For each operation where the happy path failed, determine the root cause:
 
 | Observed symptom | Root cause | Action |
 |---|---|---|
-| HTTP 400 / 422 with validation error | **Bad sample data** — request body or parameters fail server validation | Ask the user: provide valid values, or supply a Postman collection |
+| HTTP 400 / 422 with validation error | **Bad sample data** — request body or parameters fail server validation | Use Postman collection lookup table if available; otherwise ask the user to provide valid values |
 | HTTP 2xx but conformance FAIL (undocumented fields in response) | **Excessive response data** — server returns fields not in the OAS schema (potential OWASP API3 Excessive Data Exposure) | **Block and call `AskUserQuestion`**: question: `"The response for <operation> includes fields not in your OAS schema: [list fields]. Undocumented fields in responses can expose internal data that clients shouldn't see (OWASP API3). How would you like to handle it?"` options: `["Add these fields to the OAS", "Accept as-is"]`. Do not proceed to the full scan until the user has made an explicit choice for every affected operation. |
 | HTTP 2xx but wrong success code (e.g. got `200`, expected `201`) | **Status code mismatch** — `defaultResponse` in the scan config doesn't match reality | Update `defaultResponse` for that operation |
 | HTTP 404 | **Unresolved path variable** — scenario chain is missing or the `variableAssignment` JSON Pointer is wrong | Inspect the chain; fix the JSON Pointer, or build a missing chain |
@@ -481,18 +564,13 @@ For each operation where the happy path failed, determine the root cause:
 **Group all failures by root cause before asking for any user input.** Present
 the full failure table first, then resolve one root cause type at a time.
 
-### Postman collection import
+### Postman collection fallback
 
-If the user provides a Postman collection to fix bad sample data:
-
-1. Parse the collection JSON (v2.1 format).
-2. Match each failing operation by HTTP method + URL path pattern to a Postman item.
-3. Extract:
-   - `body.raw` (JSON) → inject into scan config `requestBody.json`
-   - URL path variable values → inject into `paths` array
-   - URL query variable values → inject into `queries` array
-4. Write the extracted values back into the scan config for those operations.
-5. Re-run happy paths for the affected operations only.
+If an operation still fails with HTTP 400/422 after checking the already-loaded
+Step 2.5 lookup table (or no collection was provided), ask the user to supply
+the values manually. Do not ask for a new Postman collection — if a collection
+was already imported, re-examine the existing lookup table entries for the
+failing operation before requesting manual input.
 
 ### Iteration
 
@@ -518,6 +596,18 @@ Once all happy paths pass, set `happyPathOnly: false` before the full scan:
 ```json
 "happyPathOnly": false
 ```
+
+---
+
+## Step 5.5 — Permission Gate Before Full Scan
+
+All happy paths have passed. Before running the full security scan, ask the
+user for explicit consent. Call `AskUserQuestion`:
+
+- **question**: `"All happy paths passed successfully. I'm ready to run the full security scan against <SCAN_TARGET_URL>. This will execute authorization tests (BOLA/BFLA) and conformance fuzzing across all <N> operations. Shall I proceed?"`
+- **options**: `["Yes — run the full scan", "No — stop here"]`
+
+Only proceed to Step 6 after explicit confirmation.
 
 ---
 
