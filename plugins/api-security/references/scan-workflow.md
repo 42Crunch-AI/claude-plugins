@@ -74,7 +74,7 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists.
 
 ### 1c — Write target URL to config
 
-Write `SCAN_TARGET_URL` (confirmed in SKILL.md Step 3) into
+Write `SCAN_TARGET_URL` (confirmed in the skill's URL resolution step) into
 `environments.default.variables.host` in `CONF_FILE`. No URL resolution or
 user prompting is needed here — the URL was already confirmed and reachability
 checked before the workflow started.

@@ -20,52 +20,9 @@ explicit user permission before execution.
 
 ## Entry Point
 
-1. **Setup prerequisite** — always run before proceeding.
-
-   **A. Binary version check (always runs):**
-
-   Resolve the canonical binary path for the current OS:
-   - macOS/Linux: `$HOME/.42crunch/bin/42c-ast`
-   - Windows: `$env:APPDATA\42Crunch\bin\42c-ast.exe`
-
-   Before running any check, announce:
-   > "Checking for `42c-ast`..."
-
-   Check if the binary exists:
-   - **Missing** → announce `"The 42c-ast binary isn't installed yet — running setup now."` then invoke `42crunch-setup` for full setup. Do not proceed if setup fails.
-   - **Present** → run silently:
-     1. Get installed version: `"$BINARY_PATH" --version`
-     2. Announce: `"Checking for updates to 42c-ast..."` then fetch the manifest:
-        `curl -fsSL https://repo.42crunch.com/downloads/42c-ast-manifest.json`
-        The manifest is a **JSON array**. Filter entries by the current platform
-        `architecture` key (e.g. `darwin-arm64`, `linux-amd64`, `windows-amd64` —
-        see `42crunch-setup/references/binary-setup.md` Step 1 for the full mapping table).
-        Read the `version` field from the matching entry — this is `LATEST_VERSION`.
-        If no entry matches the current platform, skip the update check and proceed.
-     3. Compare the installed version string to `LATEST_VERSION` for the current platform.
-     4. **Outdated** → silently download and replace the binary using the same
-        install steps as `42crunch-setup` (download → SHA-256 verify → chmod +x).
-        Inform the user: `42c-ast updated from v<old> to v<new>.`
-     5. **Up to date** → proceed silently.
-     6. **Manifest fetch fails** → announce: `"Could not reach the update server to check for a newer version — continuing with installed 42c-ast v<version>. Run 42crunch-setup to retry later."` then continue.
-
-   **B. Credentials check (runs after binary is confirmed):**
-
-   ```bash
-   grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
-   ```
-
-   - **`FREEMIUM_TOKEN`** is set → **Freemium mode**. Use
-     `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>`
-     in all commands. Proceed silently.
-   - **`API_KEY`** starts with `api_` or `ide_` → **Platform mode**. Read
-     `PLATFORM_HOST` from the same file (required — run `42crunch-setup` to
-     reconfigure if missing). Proceed silently.
-   - **Neither found** → call `AskUserQuestion`:
-     - **question**: `"I don't see any 42Crunch credentials configured yet. I can walk you through setup now, or you can run 42crunch-setup manually when you're ready."`
-     - **options**: `["Set up now", "Cancel — I'll run 42crunch-setup manually"]`
-     - If **Set up now** → invoke `42crunch-setup` (full setup). Do not proceed if setup fails.
-     - If **Cancel** → stop.
+1. **Setup prerequisite** — always run before proceeding. Read
+   `../../references/setup-check.md` and follow it completely. Do not proceed
+   if setup fails or the user cancels.
 
 2. **Resolve the OAS file.**
    - If the user provided a path → use it.
@@ -121,16 +78,16 @@ explicit user permission before execution.
      - If **Cancel** → stop.
 
 4. **Tag detection** — platform mode only. Run silently. Read
-   `references/tag-detection.md`. In freemium mode, skip tag detection
+   `../../references/tag-detection.md`. In freemium mode, skip tag detection
    entirely. If a tag is found, announce it to the user before asking for
    Phase 1 permission. If no tag is found, stop as described in
-   `references/tag-detection.md`.
+   `../../references/tag-detection.md`.
 
 5. **Ask for Phase 1 permission.** Call `AskUserQuestion`:
    - **question**: `"Ready to run a 42Crunch Audit on <filename>. This will analyse your OAS file and produce a scored report. Shall I proceed?"`
    - **options**: `["Yes, proceed", "No, cancel"]`
 
-6. **Execute Phase 1 — Audit.** Read `references/audit-workflow.md`.
+6. **Execute Phase 1 — Audit.** Read `../../references/audit-workflow.md`.
    The workflow runs the audit, then presents a **developer-readable,
    risk-classified report** (SQG-Blocking / Security / Data Validation tiers)
    with plain-English titles and risk descriptions — no raw rule IDs. It then
@@ -160,7 +117,7 @@ explicit user permission before execution.
      `"I'm ready to start configuring the scan. I'll ask for credentials, classify your operations, and set up test scenarios — then run a happy path validation before the full scan. Shall I proceed?"`
    - **options**: `["Yes, let's configure", "No, cancel"]`
 
-9. **Execute Phase 2 — Scan.** Read `references/scan-workflow.md`.
+9. **Execute Phase 2 — Scan.** Read `../../references/scan-workflow.md`.
    The workflow runs the scan, then presents a **risk-classified findings
    report** (Authorization failures / SQG-blocking conformance /
    informational conformance). Fix candidates are determined by SQG-blocking
@@ -218,7 +175,7 @@ Phase 2 — Scan Complete
 Show only the one SQG line per phase that matches the current mode and result.
 
 The `Score change:` row in Phase 1 is produced from the delta values computed in
-Step 4 of `references/audit-workflow.md`. Omit it when no audit fixes were
+Step 4 of `../../references/audit-workflow.md`. Omit it when no audit fixes were
 applied (user declined at the consent gate, or there were no SQG-blocking issues).
 
 If a phase was skipped (user declined), note that instead of its results.

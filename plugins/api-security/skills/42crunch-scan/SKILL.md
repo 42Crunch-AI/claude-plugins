@@ -25,52 +25,9 @@ running `42crunch-audit` first.
 
 ## Entry Point
 
-1. **Setup prerequisite** — always run before proceeding.
-
-   **A. Binary version check (always runs):**
-
-   Resolve the canonical binary path for the current OS:
-   - macOS/Linux: `$HOME/.42crunch/bin/42c-ast`
-   - Windows: `$env:APPDATA\42Crunch\bin\42c-ast.exe`
-
-   Before running any check, announce:
-   > "Checking for `42c-ast`..."
-
-   Check if the binary exists:
-   - **Missing** → announce `"The 42c-ast binary isn't installed yet — running setup now."` then invoke `42crunch-setup` for full setup. Do not proceed if setup fails.
-   - **Present** → run silently:
-     1. Get installed version: `"$BINARY_PATH" --version`
-     2. Announce: `"Checking for updates to 42c-ast..."` then fetch the manifest:
-        `curl -fsSL https://repo.42crunch.com/downloads/42c-ast-manifest.json`
-        The manifest is a **JSON array**. Filter entries by the current platform
-        `architecture` key (e.g. `darwin-arm64`, `linux-amd64`, `windows-amd64` —
-        see `42crunch-setup/references/binary-setup.md` Step 1 for the full mapping table).
-        Read the `version` field from the matching entry — this is `LATEST_VERSION`.
-        If no entry matches the current platform, skip the update check and proceed.
-     3. Compare the installed version string to `LATEST_VERSION` for the current platform.
-     4. **Outdated** → silently download and replace the binary using the same
-        install steps as `42crunch-setup` (download → SHA-256 verify → chmod +x).
-        Inform the user: `42c-ast updated from v<old> to v<new>.`
-     5. **Up to date** → proceed silently.
-     6. **Manifest fetch fails** → announce: `"Could not reach the update server to check for a newer version — continuing with installed 42c-ast v<version>. Run 42crunch-setup to retry later."` then continue.
-
-   **B. Credentials check (runs after binary is confirmed):**
-
-   ```bash
-   grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
-   ```
-
-   - **`FREEMIUM_TOKEN`** is set → **Freemium mode**. Use
-     `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>`
-     in all commands. Proceed silently.
-   - **`API_KEY`** starts with `api_` or `ide_` → **Platform mode**. Read
-     `PLATFORM_HOST` from the same file (required — run `42crunch-setup` to
-     reconfigure if missing). Proceed silently.
-   - **Neither found** → call `AskUserQuestion`:
-     - **question**: `"I don't see any 42Crunch credentials configured yet. I can walk you through setup now, or you can run 42crunch-setup manually when you're ready."`
-     - **options**: `["Set up now", "Cancel — I'll run 42crunch-setup manually"]`
-     - If **Set up now** → invoke `42crunch-setup` (full setup). Do not proceed if setup fails.
-     - If **Cancel** → stop.
+1. **Setup prerequisite** — always run before proceeding. Read
+   `../../references/setup-check.md` and follow it completely. Do not proceed
+   if setup fails or the user cancels.
 
 2. **Resolve the OAS file.**
    - If the user provided a path → use it.
@@ -126,10 +83,10 @@ running `42crunch-audit` first.
      - If **Cancel** → stop.
 
 4. **Tag detection** — platform mode only. Run silently. Read
-   `references/tag-detection.md`. In freemium mode, skip tag detection
+   `../../references/tag-detection.md`. In freemium mode, skip tag detection
    entirely. If a tag is found, announce it to the user before asking for
    permission. If no tag is found, stop as described in
-   `references/tag-detection.md`.
+   `../../references/tag-detection.md`.
 
 5. **OAS analysis for scan preview** — run silently before asking permission.
 
@@ -153,7 +110,7 @@ running `42crunch-audit` first.
      `"I'm ready to start configuring the scan. I'll ask for credentials, classify your operations, and set up test scenarios — then run a happy path validation before the full scan. Shall I proceed?"`
    - **options**: `["Yes, let's configure", "No, cancel"]`
 
-7. **Execute the Scan.** Read `references/scan-workflow.md`.
+7. **Execute the Scan.** Read `../../references/scan-workflow.md`.
    The workflow sets up the scan config, collects credentials, gathers test data,
    classifies operations, validates happy paths, then asks for permission again
    before running the full scan. It presents a **risk-classified findings report**
