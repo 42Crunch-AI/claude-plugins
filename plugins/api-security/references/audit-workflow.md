@@ -28,6 +28,7 @@ New-Item -ItemType Directory -Force -Path $OUTPUT_DIR | Out-Null
 
 ```bash
 API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
+  --enrich=false \
   --output "$OUTPUT_DIR/report.json" \
   --output-format json \
   --report-sqg \
@@ -39,6 +40,7 @@ API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
 
 ```bash
 <binary> audit run \
+  --enrich=false \
   --freemium-host stateless.42crunch.com:443 \
   --token <FREEMIUM_TOKEN> \
   --output "$OUTPUT_DIR/report.json" \

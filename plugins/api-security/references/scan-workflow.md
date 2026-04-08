@@ -541,10 +541,10 @@ operations with failing happy paths, producing a cascade of false positives.
 
 ```bash
 # Platform mode
-API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run <relative-oas-path> --conf-file <CONF_FILE>
+API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE>
 
 # Freemium mode
-<binary> scan run <relative-oas-path> \
+<binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
   --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE>
 ```
@@ -578,10 +578,10 @@ After resolving each batch of failures, re-run (using the same mode-appropriate 
 
 ```bash
 # Platform mode
-API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run <relative-oas-path> --conf-file <CONF_FILE>
+API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE>
 
 # Freemium mode
-<binary> scan run <relative-oas-path> \
+<binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
   --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE>
 ```
@@ -617,10 +617,10 @@ Run the full scan:
 
 ```bash
 # Platform mode
-API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run <relative-oas-path> --conf-file <CONF_FILE>
+API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE>
 
 # Freemium mode
-<binary> scan run <relative-oas-path> \
+<binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
   --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE>
 ```

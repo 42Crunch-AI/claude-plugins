@@ -392,11 +392,6 @@ Coverage notes:
   - <any routes that were ambiguous or skipped, and why>
   - <any response bodies that could not be inferred>
   - <any assumptions made that the user should verify>
-
-Next steps:
-  - Run a 42Crunch audit (/42crunch-audit) to score and harden the spec
-  - Add examples to improve scan coverage
-  - Review inferred schema shapes against actual database models
 ```
 
 ---
