@@ -20,40 +20,27 @@ Does **not** run a live scan — use the `42crunch-scan` skill for that.
 
 ## Entry Point
 
-1. **Setup prerequisite** — always run before proceeding. Read
-   `../../references/setup-check.md` and follow it completely. Do not proceed
-   if setup fails or the user cancels.
+1. **Pre-flight checks.** Read `../../references/pre-flight.md` and complete
+   all steps (setup, OAS resolution, tag detection). When prompting for OAS
+   file selection, use the context `"audit"` (e.g. "Which one should I audit?").
+   Do not proceed if any step fails or the user cancels.
 
-2. **Resolve the OAS file.**
-   - If the user provided a path → use it.
-   - If exactly one OAS file (`.json` or `.yaml` containing `openapi:`) is open in the editor → use it.
-   - If **multiple** OAS files are open → call `AskUserQuestion`:
-     - **question**: `"I see multiple OpenAPI files open. Which one should I audit?"` — list each filename as an option.
-   - If **no** OAS file can be resolved → call `AskUserQuestion`:
-     - **question**: `"I couldn't find an OpenAPI file to audit. Would you like me to generate one from your source code first?"` — options: `["Yes — generate from source code", "No — I'll provide a path"]`
-     - If **Yes** → invoke the `code-to-oas` skill, then resume with the generated file.
-     - If **No** → ask the user to provide the file path and wait.
-
-3. **Tag detection** — platform mode only. Run silently. Read
-   `../../references/tag-detection.md`. In freemium mode, skip tag detection
-   entirely. If a tag is found, announce it to the user before asking for
-   permission. If no tag is found, stop as described in
-   `../../references/tag-detection.md`.
-
-4. **Ask for permission.** Call `AskUserQuestion`:
+2. **Ask for permission.** Call `AskUserQuestion`:
    - **question**: `"Ready to run a 42Crunch Audit on <filename>. This will analyse your OAS file and produce a scored report. Shall I proceed?"`
    - **options**: `["Yes, proceed", "No, cancel"]`
 
-5. **Execute the Audit.** Read `../../references/audit-workflow.md`.
+3. **Execute the Audit.** Mode is already resolved from pre-flight — do not
+   re-derive it. Read `../../references/audit-workflow.md` and apply only the
+   commands for the identified mode throughout.
    The workflow runs the audit, then presents a **developer-readable,
    risk-classified report** (SQG-Blocking / Security / Data Validation tiers)
    with plain-English titles and risk descriptions — no raw rule IDs. It then
    pauses and asks the user to consent before applying any fixes. Fixes are
    only applied after explicit confirmation.
 
-6. **Present the final audit summary** (see Output Format below).
+4. **Present the final audit summary** (see Output Format below).
 
-7. **Recommend next steps** based on the outcome:
+5. **Recommend next steps** based on the outcome:
 
    **If SQG PASSED:**
    > "Your audit is complete and the SQG is passing. The natural next step is to
@@ -98,27 +85,3 @@ declined at the consent gate, or there were no SQG-blocking issues).
 
 If the user declined to apply fixes, note that instead.
 
----
-
-## General Constraints
-
-- Use `bash_tool` to execute all `42c-ast` commands.
-- Use `str_replace` or `create_file` to apply fixes to the OAS file.
-- Never modify the OAS file without first describing what will change.
-- All credential inputs are ephemeral in-session values. Do not write tokens
-  or passwords to disk outside of scan config files that already expect them.
-- Surface brief status lines before slow network operations (manifest fetch, binary download, tag detection). Do not surface individual sub-steps like SHA-256 verification or file writes.
-
----
-
-## Environment Variables
-
-| Variable          | Mode      | Purpose                                   | Default                            |
-|-------------------|-----------|-------------------------------------------|------------------------------------|
-| `API_KEY`         | Platform  | `api_*` or `ide_*` token                 | —                                  |
-| `PLATFORM_HOST`   | Platform  | Platform base URL                         | —                                  |
-| `FREEMIUM_TOKEN`  | Freemium  | Base64 token, passed as `--token`         | —                                  |
-
-**Platform mode**: `API_KEY` and `PLATFORM_HOST` set for every command. `--tag` and `--report-sqg` applied when a tag is resolved.
-
-**Freemium mode**: `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>` used for every command. No `--tag` or `--report-sqg`. No automated SQG gate — user is prompted for a target score and blocking severity threshold at the start of the audit flow; these are session-scoped only.

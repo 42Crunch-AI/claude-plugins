@@ -25,21 +25,12 @@ running `42crunch-audit` first.
 
 ## Entry Point
 
-1. **Setup prerequisite** — always run before proceeding. Read
-   `../../references/setup-check.md` and follow it completely. Do not proceed
-   if setup fails or the user cancels.
+1. **Pre-flight checks.** Read `../../references/pre-flight.md` and complete
+   all steps (setup, OAS resolution, tag detection). When prompting for OAS
+   file selection, use the context `"scan"` (e.g. "Which one should I scan?").
+   Do not proceed if any step fails or the user cancels.
 
-2. **Resolve the OAS file.**
-   - If the user provided a path → use it.
-   - If exactly one OAS file (`.json` or `.yaml` containing `openapi:`) is open in the editor → use it.
-   - If **multiple** OAS files are open → call `AskUserQuestion`:
-     - **question**: `"I see multiple OpenAPI files open. Which one should I scan?"` — list each filename as an option.
-   - If **no** OAS file can be resolved → call `AskUserQuestion`:
-     - **question**: `"I couldn't find an OpenAPI file to scan. Would you like me to generate one from your source code first?"` — options: `["Yes — generate from source code", "No — I'll provide a path"]`
-     - If **Yes** → invoke the `code-to-oas` skill, then resume with the generated file.
-     - If **No** → ask the user to provide the file path and wait.
-
-3. **Resolve the scan target URL.**
+2. **Resolve the scan target URL.**
 
    Read `servers[0].url` from the OAS file.
 
@@ -82,13 +73,7 @@ running `42crunch-audit` first.
      - If **Continue anyway** → proceed with warning noted.
      - If **Cancel** → stop.
 
-4. **Tag detection** — platform mode only. Run silently. Read
-   `../../references/tag-detection.md`. In freemium mode, skip tag detection
-   entirely. If a tag is found, announce it to the user before asking for
-   permission. If no tag is found, stop as described in
-   `../../references/tag-detection.md`.
-
-5. **OAS analysis for scan preview** — run silently before asking permission.
+3. **OAS analysis for scan preview** — run silently before asking permission.
 
    Read the OAS file and collect:
    - Total operation count
@@ -96,7 +81,7 @@ running `42crunch-audit` first.
    - BOLA candidate count: operations where the path has `{…Id}`, `{…Key}`, `{…Ref}`, or similar resource-ID placeholders AND the method is GET, PUT, PATCH, or DELETE
    - Whether the OAS contains sample data: any operation with `example`, `examples`, or `default` values on its request body or parameter schemas
 
-6. **Ask for permission to configure the scan.** Call `AskUserQuestion`:
+4. **Ask for permission to configure the scan.** Call `AskUserQuestion`:
    - **question**: (show the scan preview first, then ask)
      ```
      Ready to configure the scan?
@@ -110,7 +95,9 @@ running `42crunch-audit` first.
      `"I'm ready to start configuring the scan. I'll ask for credentials, classify your operations, and set up test scenarios — then run a happy path validation before the full scan. Shall I proceed?"`
    - **options**: `["Yes, let's configure", "No, cancel"]`
 
-7. **Execute the Scan.** Read `../../references/scan-workflow.md`.
+5. **Execute the Scan.** Mode is already resolved from pre-flight — do not
+   re-derive it. Read `../../references/scan-workflow.md` and apply only the
+   commands for the identified mode throughout.
    The workflow sets up the scan config, collects credentials, gathers test data,
    classifies operations, validates happy paths, then asks for permission again
    before running the full scan. It presents a **risk-classified findings report**
@@ -120,7 +107,7 @@ running `42crunch-audit` first.
    **Freemium mode**: no SQG is enforced for scan. Present all findings for
    information. The user decides which (if any) to fix.
 
-8. **Present the final scan summary** (see Output Format below).
+6. **Present the final scan summary** (see Output Format below).
 
 Only continue after explicit user confirmation at each permission prompt.
 
@@ -148,26 +135,11 @@ If the user declined to apply fixes or no issues were found, note that instead.
 
 ---
 
-## General Constraints
-
-- Use `bash_tool` to execute all `42c-ast` commands.
-- Use `str_replace` or `create_file` to apply fixes to the OAS file.
-- Never modify the OAS file without first describing what will change.
-- All credential inputs are ephemeral in-session values. Do not write tokens
-  or passwords to disk outside of scan config files that already expect them.
-- Surface brief status lines before slow network operations (manifest fetch, binary download, tag detection). Do not surface individual sub-steps like SHA-256 verification or file writes.
-
----
-
 ## Environment Variables
 
-| Variable          | Mode      | Purpose                                   | Default                            |
-|-------------------|-----------|-------------------------------------------|------------------------------------|
-| `API_KEY`         | Platform  | `api_*` or `ide_*` token                 | —                                  |
-| `PLATFORM_HOST`   | Platform  | Platform base URL                         | —                                  |
-| `FREEMIUM_TOKEN`  | Freemium  | Base64 token, passed as `--token`         | —                                  |
-| `SCAN42C_HOST`    | Both      | Scan target base URL (overrides OAS `servers[0]`) | None                       |
+| Variable       | Purpose |
+|----------------|---------|
+| `SCAN42C_HOST` | Scan target base URL (overrides OAS `servers[0]`) — Both modes |
 
-**Platform mode**: `API_KEY` and `PLATFORM_HOST` set for every command. `--tag` applied when a tag is resolved. SQG enforced from platform.
-
-**Freemium mode**: `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>` used for every command. No `--tag`. No scan SQG enforcement — present all findings informally.
+All other variables (`API_KEY`, `PLATFORM_HOST`, `FREEMIUM_TOKEN`) and general
+constraints are defined in `../../references/pre-flight.md`.

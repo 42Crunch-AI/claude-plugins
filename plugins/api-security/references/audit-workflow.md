@@ -62,7 +62,12 @@ API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
 
 Parse `todo.json` (fall back to `report.json` if absent) and `sqg.json`. Then
 render a **developer-readable, risk-classified report**. Do NOT surface raw
-rule IDs — translate each one using the table below.
+rule IDs — translate each one using the table in `../../references/audit-rule-translations.md`.
+
+> **Token rule**: never load raw JSON file contents into your response. Use the
+> Python extraction below to pull only the fields you need, then display the
+> formatted output. Read `../../references/audit-rule-translations.md` for the
+> rule-ID translation table only when rendering findings (not before).
 
 ### Score headline
 
@@ -103,7 +108,54 @@ Then add one score interpretation line:
 
 ### Parsing reference
 
+Extract only the needed fields — do not read the raw file into context:
+
+```bash
+python3 << 'EOF'
+import json, sys
+
+with open("$OUTPUT_DIR/todo.json") as f:
+    d = json.load(f)
+
+score      = d["score"]
+sec_score  = d["security"]["score"]
+data_score = d["data"]["score"]
+print(f"score: {score}  security: {sec_score}  data: {data_score}")
+
+# Collect issues as TOON
+issues = []
+for section in ["security", "data"]:
+    for issue_id, issue_data in d[section]["issues"].items():
+        crit  = issue_data["criticality"]
+        count = len(issue_data.get("issues", []))
+        issues.append((issue_id, section, crit, count))
+
+if issues:
+    print(f"\nissues[{len(issues)}]{{id,section,criticality,count}}:")
+    for issue_id, section, crit, count in issues:
+        print(f"  {issue_id},{section},{crit},{count}")
+EOF
+```
+
+```bash
+# sqg.json (platform mode only)
+python3 << 'EOF'
+import json
+with open("$OUTPUT_DIR/sqg.json") as f:
+    sqg = json.load(f)
+print(f"sqg_acceptance: {sqg['acceptance']}")
+print(f"sqg_name: {sqg['sqgsDetail'][0]['name']}")
+blocking = [r for d in sqg.get("processingDetails", []) for r in d.get("blockingRules", [])]
+if blocking:
+    print(f"blocking_rules: {', '.join(blocking)}")
+EOF
+```
+
+Use the extracted output above for all display and fix logic. Never include
+raw `todo.json` or `sqg.json` content in your response.
+
 ```python
+# Reference: field paths used in display and fix logic
 # todo.json
 index = d["index"]                      # list of OAS paths (resolve pointer ints against this)
 score = d["score"]
@@ -142,33 +194,6 @@ sqg_name       = sqg["sqgsDetail"][0]["name"]
 blocking_rules = [r for d in sqg.get("processingDetails", [])
                   for r in d.get("blockingRules", [])]
 ```
-
-### Rule-ID → developer language translation table
-
-Match each rule ID by suffix. When multiple suffixes match, use the most
-specific one.
-
-| Rule ID suffix (end of string) | Plain-English Title | Risk for developers |
-|---|---|---|
-| `string-pattern` | Missing input format constraint | Without a regex pattern, any string is accepted — enables format-bypass and injection attacks |
-| `string-maxlength` | Missing maximum string length | Unbounded strings allow buffer-overflow-style abuse and log flooding |
-| `numerical-max` | Missing numeric upper bound | Arbitrarily large numbers can cause integer overflow or resource exhaustion |
-| `additionalproperties-true` | Schema allows extra/unknown fields | Mass-assignment risk — undocumented fields submitted by clients may be silently processed |
-| `array-maxitems` | Response array has no item cap | API can return unlimited rows, causing data over-exposure and DoS via large payloads |
-| `response-403` | 403 Forbidden response not documented | Clients can't reliably detect authorization failures; broken access control goes unnoticed |
-| `response-404` | 404 Not Found response not documented | Clients can't distinguish "resource missing" from other errors |
-| `response-406` | 406 Not Acceptable response not documented | Content negotiation failures are undocumented; clients may misinterpret errors |
-| `response-429` | 429 Too Many Requests response not documented | Rate-limit responses are undocumented; clients cannot implement back-off |
-| `response-default-undefined` | No default error response defined | Unhandled errors return undocumented responses; clients fail unpredictably |
-| `header-schema-undefined` | Response header has no schema | Header values are unvalidated and undocumented; clients can't rely on them |
-| `string-loosepattern` | Regex pattern is too permissive | Overly broad pattern allows values outside the intended format through |
-| `sample-undefined` | No example values provided | Scan and test tools cannot auto-generate valid requests; all test coverage is blocked |
-| `schema-example-improper` | Example value doesn't match its schema | Misleading documentation — example fails its own schema validation |
-| `global-parameter-unused` | Reusable parameter defined but never referenced | Dead schema definition; creates maintenance confusion |
-| `accept-empty-security-used` | Empty security override in use | One or more operations may bypass authentication; review intent carefully |
-
-For any rule ID not in the table: derive a title by splitting the rule ID on
-`-`, skipping the leading `v3`, and joining the remaining words as a sentence.
 
 ### Rendered format
 

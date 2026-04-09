@@ -107,51 +107,32 @@ prompts are shown, so the user understands why they're being asked for two sets.
 
 ### Per-scheme credential collection
 
-**Login endpoint detected (`POST /login`, `POST /auth/token`, `POST /auth/login`, etc.) — most common:**
+For each auth scheme, collect credentials using `AskUserQuestion` — never generate, guess, or suggest values. Collect in this order: User 1 first, then User 2 (BOLA only), then admin (BFLA only).
 
-Announce which endpoint will be used to acquire the token, then call two separate `AskUserQuestion` prompts:
+**Login endpoint** (`POST /login`, `POST /auth/token`, etc. — most common):
 
-1. `AskUserQuestion` — **question**: `"I'll acquire User 1's token by calling <loginEndpoint>. What is the username or email for User 1?"` — store the answer as `{{username}}` in `environments.default.variables`.
-2. `AskUserQuestion` — **question**: `"What is the password for User 1?"` — store as `{{password}}` in `environments.default.variables`.
+Announce which endpoint will be used, then collect per user:
 
-If BOLA candidates were found, collect User 2 credentials immediately after User 1:
+| User | Condition | Username var | Password var | Question prefix |
+|---|---|---|---|---|
+| User 1 | always | `{{username}}` | `{{password}}` | `"I'll acquire User 1's token by calling <loginEndpoint>."` |
+| User 2 | BOLA found | `{{user2Username}}` | `{{user2Password}}` | `"I also need credentials for User 2, who should NOT have access to User 1's resources (BOLA testing)."` |
+| Admin | BFLA found | `{{adminUsername}}` | `{{adminPassword}}` | `"I need credentials for an admin user to test privileged operations (BFLA)."` |
 
-3. `AskUserQuestion` — **question**: `"I also need credentials for User 2, who should NOT have access to User 1's resources (used for BOLA testing). What is the username or email for User 2?"` — store as `{{user2Username}}`.
-4. `AskUserQuestion` — **question**: `"What is the password for User 2?"` — store as `{{user2Password}}`.
+For each required user: call `AskUserQuestion` for username/email, then a second call for password.
 
-If BFLA candidates were found, collect the admin user credentials as well:
+**Bearer / JWT** (no login endpoint in OAS):
 
-5. `AskUserQuestion` — **question**: `"I need credentials for an admin user to test privileged operations (BFLA). What is the username or email for the admin user?"` — store as `{{adminUsername}}`.
-6. `AskUserQuestion` — **question**: `"What is the password for the admin user?"` — store as `{{adminPassword}}`.
+- `AskUserQuestion`: `"I need a bearer token for User 1. Do you have one ready, or acquire from an endpoint?"` — options: `["I have a token — I'll paste it", "I need to acquire one — I'll specify the endpoint"]`
+  - If paste → ask for the token, store as `{{user1Token}}`
+  - If acquire → ask for endpoint, then collect username + password as above
+- If BOLA found → repeat for User 2, store as `{{user2Token}}`
 
-**Bearer / JWT (no login endpoint in OAS — token provided directly):**
+**API Key**: `AskUserQuestion` for the key value, store as `{{apiKey}}`. Header/param name from `securitySchemes[*].name` and `in`.
 
-1. `AskUserQuestion` — **question**: `"I need a bearer token for User 1. Do you have one ready, or would you like to acquire one from a specific API endpoint first?"` — **options**: `["I have a token — I'll paste it", "I need to acquire one — I'll specify the endpoint"]`
-   - If **paste**: `AskUserQuestion` — **question**: `"Please paste the bearer token for User 1:"` — store as `{{user1Token}}`.
-   - If **acquire**: ask which endpoint to call, then collect username + password as in the login endpoint flow above.
+**Basic Auth**: collect username → `{{username}}` and password → `{{password}}`. If BOLA/BFLA, add User 2 / admin using the same two-question pattern.
 
-If BOLA candidates were found:
-
-2. `AskUserQuestion` — **question**: `"Do you have a token for User 2 (who should NOT have access to User 1's resources), or would you like to acquire one?"` — **options**: `["I have a token — I'll paste it", "I need to acquire one"]`
-   - Follow the same pattern as User 1.
-
-**API Key:**
-
-1. `AskUserQuestion` — **question**: `"Please provide the API key for User 1:"` — store as `{{apiKey}}`.
-   - The header or query param name is read from `securitySchemes[*].name` and `in` in the OAS. Only ask if ambiguous.
-
-**Basic Auth:**
-
-1. `AskUserQuestion` — **question**: `"What is the username or email for User 1?"` — store as `{{username}}`.
-2. `AskUserQuestion` — **question**: `"What is the password for User 1?"` — store as `{{password}}`.
-
-If BOLA/BFLA candidates were found, collect additional users following the same two-question pattern, labelled "User 2" or "admin user" as appropriate.
-
-**OAuth2:**
-
-1. `AskUserQuestion` — **question**: `"For OAuth2, do you have an access token ready, or should I use the token endpoint from the OAS (<tokenEndpoint>)?"` — **options**: `["I have an access token — I'll paste it", "Use the token endpoint — I'll provide client credentials"]`
-   - If **paste**: `AskUserQuestion` — **question**: `"Please paste the access token for User 1:"` — store as `{{accessToken}}`.
-   - If **client credentials**: collect `client_id` and `client_secret` with separate `AskUserQuestion` calls.
+**OAuth2**: `AskUserQuestion`: `"Do you have an access token, or use the token endpoint from the OAS?"` — options: `["I have an access token", "Use the token endpoint — I'll provide client credentials"]`. Collect accordingly.
 
 Do not proceed until at least the primary user's credentials are confirmed.
 
@@ -541,12 +522,41 @@ operations with failing happy paths, producing a cascade of false positives.
 
 ```bash
 # Platform mode
-API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE>
+API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false \
+  <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
 
 # Freemium mode
 <binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
-  --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE>
+  --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
+```
+
+Extract only failing happy paths — never include raw output in your response:
+
+```bash
+python3 << 'EOF'
+import json, re
+raw = open("/tmp/42c-happy-out.json").read()
+match = re.search(r'\{[\s\S]*\}', raw)
+if not match:
+    print("No JSON in output"); exit(0)
+data = json.loads(match.group())
+results = data.get("results", data.get("scanResults", []))
+if isinstance(results, dict):
+    results = [results]
+fails = [
+    (r.get("operationId", r.get("path","?")), t.get("testKey","?"), t.get("httpStatus",""), t.get("reason",""))
+    for r in results
+    for t in r.get("testResults", [])
+    if t.get("status") == "fail" and "happy" in t.get("testKey","").lower()
+]
+if fails:
+    print(f"happy_path_failures[{len(fails)}]{{operation,test,status,reason}}:")
+    for op, test, code, reason in fails:
+        print(f"  {op},{test},{code},{reason[:60]}")
+else:
+    print("happy_path_failures: none")
+EOF
 ```
 
 ### Parse results per operation
@@ -574,17 +584,7 @@ failing operation before requesting manual input.
 
 ### Iteration
 
-After resolving each batch of failures, re-run (using the same mode-appropriate command from above):
-
-```bash
-# Platform mode
-API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE>
-
-# Freemium mode
-<binary> scan run --enrich=false <relative-oas-path> \
-  --freemium-host stateless.42crunch.com:443 \
-  --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE>
-```
+After resolving each batch of failures, re-run using the same command as above (output to `/tmp/42c-happy-out.json`) and re-extract with the same Python snippet.
 
 Repeat until all reachable happy paths pass, or the user explicitly marks an
 operation as skipped (record it with the reason).
@@ -613,51 +613,70 @@ Only proceed to Step 6 after explicit confirmation.
 
 ## Step 6 — Full Scan
 
-Run the full scan:
+Run the full scan, capturing output to a temp file for extraction:
 
 ```bash
 # Platform mode
-API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE>
+API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false \
+  <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
 
 # Freemium mode
 <binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
-  --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE>
+  --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
 ```
 
-**Freemium mode note**: No SQG is enforced by the platform for freemium scan. The
-`sqgPass` field in stdout will be absent or `true`. When presenting results in
-freemium mode, include this note for the user:
+**Immediately after the command completes**, extract the summary as TOON —
+never include raw stdout content in your response:
 
-> "In freemium mode, the scan shows all findings for your information — there
-> is no automatic quality gate. This means no finding will block your workflow,
-> but the authorization failures shown in red are real vulnerabilities worth
-> fixing regardless of the gate (OWASP API1/API5). The conformance findings in
-> yellow document gaps between your OAS contract and your API's actual behaviour."
+```bash
+python3 << 'EOF'
+import json, re
+
+raw = open("/tmp/42c-scan-out.json").read()
+match = re.search(r'\{[\s\S]*\}', raw)
+if not match:
+    print("No JSON found in scan output"); exit(0)
+
+data = json.loads(match.group())
+sqg = "PASSED" if data.get("sqgPass") else ("FAILED" if "sqgPass" in data else "N/A")
+print(f"sqgPass: {sqg}")
+for d in data.get("sqgDetails", []):
+    rules = d.get("blockingRules", [])
+    if rules:
+        print(f"blockingRules[{len(rules)}]: {', '.join(rules)}")
+
+# Failing test results (structure varies by CLI version)
+results = data.get("results", data.get("scanResults", []))
+if isinstance(results, dict):
+    results = [results]
+failures = [
+    (r.get("operationId", r.get("path", "?")), t.get("testKey", "?"), t.get("severity", ""))
+    for r in results
+    for t in r.get("testResults", [])
+    if t.get("status") == "fail"
+]
+if failures:
+    print(f"\nfailures[{len(failures)}]{{operation,test,severity}}:")
+    for op, test, sev in failures:
+        print(f"  {op},{test},{sev}")
+else:
+    print("failures: none")
+EOF
+```
+
+Use only the TOON output above when rendering Step 7. Do not load or display
+the raw `/tmp/42c-scan-out.json` content.
+
+**Freemium mode**: `sqgPass` will be absent or `true`. Present all findings
+informally — no quality gate is enforced. Note to the user:
+> "In freemium mode the scan shows all findings for your information — there
+> is no automatic quality gate. Authorization failures (red) are real
+> vulnerabilities worth fixing regardless of the gate (OWASP API1/API5).
+> Conformance findings (yellow) document gaps between your OAS contract and
+> your API's actual behaviour."
 
 Then ask which (if any) findings the user wants to address.
-
-**The SQG result is only in stdout, not in `scan-report.json`.** Parse it from
-the JSON output of the command.
-
-### Stdout JSON structure
-
-```json
-{
-  "sqgPass": true,
-  "sqgDetails": [
-    {
-      "blockingSqgId": "<uuid>",
-      "blockingRules": [
-        "severity_threshold",
-        "forbidden_test:<test-key>"
-      ]
-    }
-  ],
-  "statusCode": 0,
-  "statusMessage": "success"
-}
-```
 
 ### Blocking rule formats
 
