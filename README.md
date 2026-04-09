@@ -1,6 +1,6 @@
-# 42Crunch Plugin for Claude Code
+# 42Crunch API Security Plugin for Claude Code
 
-Automate API security directly in your Claude Code workflow. This plugin brings 42Crunch's audit, scan, and remediation capabilities into the Claude Code agent as a set of AI-driven skills — giving you a continuous **audit → scan → remediate → validate** security loop without leaving your IDE.
+Automate API security directly in Claude Code with 42Crunch - automatically audit OpenAPI specs, detect vulnerabilities aligned with OWASP API Security risks (including BOLA/BFLA), and apply AI-powered fixes. Designed for AI-assisted development workflows, it provides continuous guardrails through an **audit->scan->remediate->validate** loop, ensuring APIs meet enterprise security standards before deployment.
 
 ## Overview
 
