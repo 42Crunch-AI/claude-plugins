@@ -1,5 +1,5 @@
 ---
-name: 42crunch-v2
+name: 42crunch-api-security-testing
 description: >
   Run both a 42Crunch Audit and a live Scan together in a single pipeline.
   Use this skill when the user wants to run audit and scan together, complete
@@ -120,7 +120,7 @@ explicit user permission before execution.
     **If both phases passed and fixes were applied:**
     > "Both audit and scan are passing. Your OAS is more precise and your
     > security contract is enforced. Consider committing the updated OAS file
-    > and rerunning `42crunch-v2` after any significant API change."
+    > and rerunning `42crunch-api-security-testing` after any significant API change."
 
     **If either phase failed or the user declined fixes:**
     > "Here's what's still open: [list remaining SQG-failing issues or unfixed

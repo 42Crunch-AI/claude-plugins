@@ -115,7 +115,7 @@ Display the setup summary (see Output Format below).
 >   a running API. I'll check for BOLA, BFLA, and response-contract violations.
 >   Best run after the audit passes.
 >
-> - **`42crunch-v2`** — Runs both audit and scan back-to-back. The recommended
+> - **`42crunch-api-security-testing`** — Runs both audit and scan back-to-back. The recommended
 >   workflow when you want the full picture in one session.
 >
 > Which would you like to start with?

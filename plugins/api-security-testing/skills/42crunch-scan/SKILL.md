@@ -7,7 +7,7 @@ description: >
   configure a scan config, or fix scan-reported issues. Triggers on phrases
   like "run scan", "scan only", "conformance test", "BOLA test", "BFLA test",
   "42crunch scan", "scan config", or any request focused on live API testing
-  without running a static audit. Use 42crunch-v2 when the user wants both
+  without running a static audit. Use 42crunch-api-security-testing when the user wants both
   audit and scan together.
 ---
 

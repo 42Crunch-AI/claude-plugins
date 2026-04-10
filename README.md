@@ -4,22 +4,21 @@ Automate API security directly in Claude Code with 42Crunch - automatically audi
 
 ## Overview
 
-This repository is a **Claude Code plugin marketplace** that registers the `api-security-automation` plugin. The plugin delivers skills that Claude can invoke by natural language, covering everything from generating an OpenAPI spec to running live audits and conformance scans against a running API.
+This repository is a **Claude Code plugin marketplace** that registers the `api-security-testing` plugin. The plugin delivers skills that Claude can invoke by natural language, covering everything from generating an OpenAPI spec to running live audits and conformance scans against a running API.
 
 ```
 .claude-plugin/
   marketplace.json              # Plugin registry manifest
 plugins/
-  api-security/
+  api-security-testing/
     .claude-plugin/
       plugin.json               # Plugin metadata
     skills/
       42crunch-setup/           # Install, configure, and credential setup
       42crunch-audit/           # Static OAS security audit
       42crunch-scan/            # Live conformance & authorization scan
-      42crunch-v2/              # Combined audit + scan pipeline
+      42crunch-api-security-testing/  # Combined audit + scan pipeline
       code-to-oas/              # Generate an OAS from source code
-      oas-to-arazzo/            # Generate an Arazzo workflow spec from an OAS
 ```
 
 ## Skills
@@ -86,7 +85,7 @@ If no OAS file is open or provided, Claude offers to generate one from your sour
 
 ---
 
-### `42crunch-v2` — Full Audit + Scan Pipeline
+### `42crunch-api-security-testing` — Full Audit + Scan Pipeline
 
 Orchestrates the Audit and Scan skills in sequence as Phase 1 and Phase 2. Verifies the environment (binary + credentials), resolves the OAS file, and confirms the scan target URL with a reachability check — all before Phase 1 begins. Each phase requires separate user consent. Before Phase 2, Claude runs a silent OAS analysis and presents a scan configuration preview (target URL, operation count, auth schemes, BOLA candidates, sample data availability) so you know exactly what the scan setup will involve. Produces a combined summary at the end covering both phases.
 
@@ -99,14 +98,6 @@ Orchestrates the Audit and Scan skills in sequence as Phase 1 and Phase 2. Verif
 Analyzes your API codebase (read-only) and produces a complete `openapi.json`. Supports all major frameworks including Express, FastAPI, Flask, Django, NestJS, Spring Boot, Gin, Echo, Chi, Rails, Sinatra, and .NET. Detects routes, parameters, request/response schemas, auth middleware, data models, and server config. Performs a self-review pass before writing the file.
 
 **Trigger phrases:** "generate OAS from code", "create OpenAPI spec", "document my API"
-
----
-
-### `oas-to-arazzo` — Generate an Arazzo Workflow Spec
-
-Reads an existing OAS file and produces an `arazzo.yaml` alongside it. Identifies logical workflows (auth flows, CRUD lifecycles, search-then-act patterns) and wires step outputs to inputs using Arazzo expressions.
-
-**Trigger phrases:** "generate Arazzo", "create workflow spec", "OAS to Arazzo"
 
 ---
 
