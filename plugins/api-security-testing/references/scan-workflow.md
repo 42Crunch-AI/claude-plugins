@@ -111,15 +111,19 @@ For each auth scheme, collect credentials using `AskUserQuestion` — never gene
 
 **Login endpoint** (`POST /login`, `POST /auth/token`, etc. — most common):
 
-Announce which endpoint will be used, then collect per user:
+Announce which endpoint will be used. Then make a **single** `AskUserQuestion` call sized to the situation:
 
-| User | Condition | Username var | Password var | Question prefix |
-|---|---|---|---|---|
-| User 1 | always | `{{username}}` | `{{password}}` | `"I'll acquire User 1's token by calling <loginEndpoint>."` |
-| User 2 | BOLA found | `{{user2Username}}` | `{{user2Password}}` | `"I also need credentials for User 2, who should NOT have access to User 1's resources (BOLA testing)."` |
-| Admin | BFLA found | `{{adminUsername}}` | `{{adminPassword}}` | `"I need credentials for an admin user to test privileged operations (BFLA)."` |
+- **No BOLA found** — use 2 questions:
+  - `header: "User 1"`, question: `"What is User 1's username or email?"`  → store as `{{username}}`
+  - `header: "User 1"`, question: `"What is User 1's password or PIN?"`    → store as `{{password}}`
 
-For each required user: call `AskUserQuestion` for username/email, then a second call for password.
+- **BOLA found** — use 4 questions (all in the same call):
+  - `header: "User 1"`, question: `"What is User 1's username or email?"`                                       → store as `{{username}}`
+  - `header: "User 1"`, question: `"What is User 1's password or PIN?"`                                        → store as `{{password}}`
+  - `header: "User 2"`, question: `"What is User 2's username or email? (must NOT share User 1's resources)"`  → store as `{{user2Username}}`
+  - `header: "User 2"`, question: `"What is User 2's password or PIN?"`                                        → store as `{{user2Password}}`
+
+For BFLA (admin) credentials, use a separate `AskUserQuestion` call after the BOLA pair — collect `{{adminUsername}}` and `{{adminPassword}}` in 2 questions with `header: "Admin"`.
 
 **Bearer / JWT** (no login endpoint in OAS):
 
@@ -130,7 +134,7 @@ For each required user: call `AskUserQuestion` for username/email, then a second
 
 **API Key**: `AskUserQuestion` for the key value, store as `{{apiKey}}`. Header/param name from `securitySchemes[*].name` and `in`.
 
-**Basic Auth**: collect username → `{{username}}` and password → `{{password}}`. If BOLA/BFLA, add User 2 / admin using the same two-question pattern.
+**Basic Auth**: use the same adaptive single-call pattern as Login endpoint — 2 questions (no BOLA) or 4 questions (BOLA). For BFLA admin, use a separate 2-question call with `header: "Admin"`.
 
 **OAuth2**: `AskUserQuestion`: `"Do you have an access token, or use the token endpoint from the OAS?"` — options: `["I have an access token", "Use the token endpoint — I'll provide client credentials"]`. Collect accordingly.
 
