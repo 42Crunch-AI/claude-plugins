@@ -363,6 +363,8 @@ DeleteUser             | B      | yes   | UserRegistration → /{userId}
 DeleteAccount          | D      | no    | register+login throwaway → delete throwaway
 ```
 
+**`BOLA? = yes` has a direct consequence in Step 4:** every operation marked as a BOLA candidate will receive an additional BOLA test scenario (using User 2's token) alongside its happy path scenario. Every operation marked as a BFLA candidate will receive a BFLA test scenario (using User 1's low-privilege token).
+
 Call `AskUserQuestion`:
 - **question**: `"Here is the proposed operation classification (shown above). Does this look correct, or do you need to correct any misclassifications?"`
 - **options**: `["Yes — proceed", "No — I need to correct some classifications"]`
@@ -505,6 +507,96 @@ so `email` and credential fields use template variables (e.g.
 The last step overrides the primary user's token variable (e.g. `user1Token`)
 with `throwawayToken` so the `AccessToken/User1` credential sends the
 throwaway's JWT. User1 remains untouched.
+
+### BOLA test scenario pattern (BOLA? = yes operations)
+
+For every operation marked `BOLA? = yes` in the Step 3 table, add a second
+scenario entry alongside its `happy.path` scenario. The mechanism is identical
+to Class-D: override the primary token variable via `environment` — but swap
+in `{{user2Token}}` instead of a throwaway token.
+
+**Class-B BOLA candidate** (needs a creator step to obtain a valid resource ID):
+
+```json
+{
+  "key": "bola.test",
+  "requests": [
+    {
+      "$ref": "#/operations/<CreatorOperationId>/request",
+      "responses": {
+        "<successCode>": {
+          "expectations": { "httpStatus": <successCode> },
+          "variableAssignments": {
+            "<varName>": {
+              "in": "body", "from": "response", "contentType": "json",
+              "path": { "type": "jsonPointer", "value": "/<fieldName>" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "$ref": "#/operations/<TargetOperationId>/request",
+      "environment": { "<primaryTokenVar>": "{{user2Token}}" },
+      "responses": {
+        "403": { "expectations": { "httpStatus": 403 } },
+        "401": { "expectations": { "httpStatus": 401 } }
+      }
+    }
+  ]
+}
+```
+
+**Class-A BOLA candidate** (resource ID comes from static env vars — no
+creator step needed):
+
+```json
+{
+  "key": "bola.test",
+  "requests": [
+    {
+      "$ref": "#/operations/<TargetOperationId>/request",
+      "environment": { "<primaryTokenVar>": "{{user2Token}}" },
+      "responses": {
+        "403": { "expectations": { "httpStatus": 403 } },
+        "401": { "expectations": { "httpStatus": 401 } }
+      }
+    }
+  ]
+}
+```
+
+`<primaryTokenVar>` is the template variable name used for the bearer token
+in the target operation's request (e.g. `user1Token`, `accessToken`). The
+`environment` override applies only to this scenario step, leaving all other
+scenarios unaffected.
+
+A 2xx response on the `bola.test` scenario is a confirmed BOLA finding. A 401
+or 403 means the server enforces ownership — not a finding.
+
+### BFLA test scenario pattern (BFLA candidates)
+
+For every operation flagged as a BFLA candidate (privileged / admin-only),
+add a BFLA test scenario that attempts the operation with User 1's
+low-privilege token in place of the admin token.
+
+```json
+{
+  "key": "bfla.test",
+  "requests": [
+    {
+      "$ref": "#/operations/<PrivilegedOperationId>/request",
+      "environment": { "<adminTokenVar>": "{{user1Token}}" },
+      "responses": {
+        "403": { "expectations": { "httpStatus": 403 } },
+        "401": { "expectations": { "httpStatus": 401 } }
+      }
+    }
+  ]
+}
+```
+
+A 2xx response on the `bfla.test` scenario is a confirmed BFLA finding.
 
 ---
 
