@@ -25,12 +25,5 @@
     "ai",
     "devsecops",
     "42crunch"
-  ],
-  "skills": [
-    { "name": "42crunch-setup", "path": "skills/42crunch-setup/SKILL.md" },
-    { "name": "42crunch-audit", "path": "skills/42crunch-audit/SKILL.md" },
-    { "name": "42crunch-scan", "path": "skills/42crunch-scan/SKILL.md" },
-    { "name": "42crunch-api-security-testing", "path": "skills/42crunch-api-security-testing/SKILL.md" },
-    { "name": "code-to-oas", "path": "skills/code-to-oas/SKILL.md" }
   ]
 }
