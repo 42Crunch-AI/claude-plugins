@@ -91,8 +91,10 @@ generate, guess, or suggest credential values.
 **BOLA/BFLA second-user identification (do this before collecting any credentials):**
 Identify all BOLA/BFLA candidates in the OAS. Flag every operation where ALL
 of the following are true:
-- The path contains at least one `{…Id}`, `{…Key}`, `{…Ref}`, or equivalent
-  resource-ID placeholder.
+- The path contains at least one path parameter whose name ends in `Id`, `Key`,
+  or `Ref` (e.g. `{userId}`, `{orderId}`, `{documentRef}`), or is a UUID/integer
+  field whose name matches a resource type — indicating a specific resource
+  instance, not a collection.
 - The HTTP method is GET, PUT, PATCH, or DELETE (i.e. the operation reads or
   mutates a specific resource instance, not a collection).
 
@@ -100,7 +102,20 @@ HTTP method does NOT gate BOLA candidacy — a PUT or PATCH on `/{resourceId}`
 is just as much a BOLA candidate as a DELETE or GET on the same path.
 
 Flag privileged operations (admin-only actions) separately as BFLA candidates
-even if they have no path ID parameter.
+even if they have no path ID parameter. Use these heuristics to detect them
+automatically; fall back to asking the user if none match:
+
+- Path segment contains `admin`, `internal`, `management`, `staff`, `system`,
+  or `superuser` (e.g. `/admin/users`, `/internal/reports`).
+- Operation is in a tag group named `Admin`, `Internal`, `Management`, or similar.
+- `security` requirement on the operation references a scheme whose name includes
+  `admin` or `superuser`.
+- Request body or parameter has a field whose enum or description restricts it to
+  admin use (e.g. `role: admin`).
+- If none of the above match and the OAS provides no clear signals, call
+  `AskUserQuestion`: `"I couldn't automatically detect any privileged operations.
+  Are there any admin-only or elevated-privilege endpoints I should test for
+  BFLA?"` — options: `["Yes — I'll flag them", "No — skip BFLA testing"]`.
 
 This determines whether a second user (User 2) is needed before credential
 prompts are shown, so the user understands why they're being asked for two sets.
@@ -682,8 +697,15 @@ failing operation before requesting manual input.
 
 After resolving each batch of failures, re-run using the same command as above (output to `/tmp/42c-happy-out.json`) and re-extract with the same Python snippet.
 
-Repeat until all reachable happy paths pass, or the user explicitly marks an
-operation as skipped (record it with the reason).
+For each operation where the root cause cannot be resolved (e.g. the required
+resource cannot be created in this environment), call `AskUserQuestion`:
+- **question**: `"The happy path for <operationId> is still failing (<root-cause summary>). What would you like to do?"`
+- **options**: `["Try a different fix", "Skip this operation — I'll come back to it later", "Abort the scan setup"]`
+
+If **Skip** is chosen: record the operation ID and reason in a `skipped_operations` session
+variable. Exclude it from all future happy-path re-runs and announce it in the final summary.
+
+Repeat until all **non-skipped** happy paths pass.
 
 ### Restore runtime flags
 
@@ -722,7 +744,8 @@ API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false \
   --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
 ```
 
-**Immediately after the command completes**, extract the summary as TOON —
+**Immediately after the command completes**, extract the summary as TOON
+(Token-Oriented Object Notation — https://github.com/toon-format/toon) —
 never include raw stdout content in your response:
 
 ```bash

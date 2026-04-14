@@ -39,31 +39,13 @@ Greet the user and explain what they'll be able to do once setup is complete:
 
 ### Step 2 — Binary setup
 
-Follow `references/binary-setup.md` completely.
-
-The procedure covers, in order:
-- **Step 0** — Check whether the binary already exists at the canonical path:
-  - macOS/Linux: `$HOME/.42crunch/bin/42c-ast`
-  - Windows: `%APPDATA%\42Crunch\bin\42c-ast.exe`
-
-  If the binary is **missing or broken** → continue to Step 1.
-
-  If the binary is **present and `--version` exits 0** → continue to Step 2
-  (fetch manifest and compare versions):
-  - Up to date → binary setup is complete. Skip directly to Step 3 (Credential setup).
-  - Outdated (or version unparseable) → continue to Step 3 (download and replace),
-    then skip to credential setup.
-
-- **Step 1** — Detect OS and architecture; resolve `BIN_DIR` and `BINARY_PATH`.
-- **Step 2** — Fetch the manifest, resolve `LATEST_VERSION` / `DOWNLOAD_URL` / `EXPECTED_SHA256`.
-- **Step 3** — Download, verify SHA-256, install, set permissions (`chmod +x` on
-  macOS/Linux), confirm.
+Follow `../../references/binary-setup.md` completely (verbose mode — announce each major step to the user).
 
 Stop and surface a clear error if the binary cannot be installed. Do not proceed to Step 3.
 
 ### Step 3 — Credential setup
 
-Follow `references/credential-setup.md` completely.
+Follow `../../references/credential-setup.md` completely.
 
 The procedure covers, in order:
 - Silently check whether credentials are already present in
@@ -130,8 +112,10 @@ Display the setup summary (see Output Format below).
 | Item             | Status                                              |
 |------------------|-----------------------------------------------------|
 | Binary           | <BINARY_PATH> v<version>                            |
-| Credential mode  | <Platform | Freemium>                               |
-| API key          | <prefix_>••••••••  (stored in <path>)               |
+| Credential mode  | <Platform \| Freemium>                              |
+| API key / Token  | Platform: `api_••••••••` or `ide_••••••••`          |
+|                  | Freemium: `<first-4-chars>••••••••`                 |
+|                  | (stored in <path>)                                  |
 | Platform host    | <url>  ← omit this row for freemium mode            |
 ```
 
@@ -142,8 +126,9 @@ Display the setup summary (see Output Format below).
 - All detection steps (binary check, credential check) run silently. Surface
   output only on failure or when prompting the user.
 - Never print the API key or Freemium token in plaintext after the user enters
-  it. Always mask it (`api_••••••••` / `ide_••••••••` for platform tokens,
-  `••••••••` for freemium).
+  it. Always mask it (`api_••••••••` / `ide_••••••••` for platform tokens — keep
+  prefix, replace rest; `<first-4-chars>••••••••` for freemium tokens, e.g.
+  `eyJh••••••••`).
 - Use `bash_tool` for all shell commands; use `str_replace_editor` or
   `create_file` when writing config files — never shell redirection.
 - Use `curl` for downloads; fall back to `wget` if `curl` is unavailable. On

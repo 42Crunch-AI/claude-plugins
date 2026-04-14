@@ -62,12 +62,13 @@ API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
 
 Parse `todo.json` (fall back to `report.json` if absent) and `sqg.json`. Then
 render a **developer-readable, risk-classified report**. Do NOT surface raw
-rule IDs — translate each one using the table in `../../references/audit-rule-translations.md`.
+rule IDs — translate each one using the table in `./audit-rule-translations.md`.
 
 > **Token rule**: never load raw JSON file contents into your response. Use the
-> Python extraction below to pull only the fields you need, then display the
-> formatted output. Read `../../references/audit-rule-translations.md` for the
-> rule-ID translation table only when rendering findings (not before).
+> Python extraction below to pull only the fields you need (TOON output —
+> https://github.com/toon-format/toon), then display the formatted output.
+> Read `./audit-rule-translations.md` for the rule-ID translation table only
+> when rendering findings (not before).
 
 ### Score headline
 

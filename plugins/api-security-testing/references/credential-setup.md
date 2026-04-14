@@ -32,8 +32,9 @@ Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(FREEMIUM_TOKEN|
 - **question**: `"Credentials already configured in ~/.42crunch/conf/env — running in <mode> mode. Key: <masked>. Would you like to keep the existing credentials or replace them?"`
 - **options**: `["Keep existing credentials", "Replace credentials"]`
 
-Masking rules: `api_••••••••` / `ide_••••••••` for platform tokens; `••••••••`
-for freemium.
+Masking rules: `api_••••••••` / `ide_••••••••` for platform tokens (keep
+prefix, replace remaining chars); show first 4 characters + `••••••••` for
+freemium tokens (e.g. `eyJh••••••••`).
 
 If keeping → **credential setup complete.**
 If replacing → continue to Step 2.
@@ -155,7 +156,7 @@ Display confirmation with the value **masked**:
 
 **Freemium mode:**
 > Credentials saved to `~/.42crunch/conf/env`.
-> Mode: **Freemium** | Token: `••••••••`
+> Mode: **Freemium** | Token: `<first-4-chars>••••••••`  ← show first 4 chars of the token
 
 ---
 

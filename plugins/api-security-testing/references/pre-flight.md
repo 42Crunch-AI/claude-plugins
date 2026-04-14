@@ -5,13 +5,39 @@ any skill-specific logic. Do not proceed if any step fails or the user cancels.
 
 ---
 
-## Step 1 — Setup
+## Step 1 — Binary Check
 
-Read `../../references/setup-check.md` and follow it completely.
+Resolve the canonical binary path for the current OS:
+- macOS/Linux: `$HOME/.42crunch/bin/42c-ast`
+- Windows: `%APPDATA%\42Crunch\bin\42c-ast.exe`
+
+Announce: `"Checking for 42c-ast..."`
+
+- **Missing** → announce `"The 42c-ast binary isn't installed yet — running setup now."` then invoke `42crunch-setup` for full setup. Do not proceed if setup fails.
+- **Present** → silently follow `./binary-setup.md` (silent mode — see Caller Verbosity section in that file). The only output is `"42c-ast updated from vX to vY."` if an update was applied. If the manifest is unreachable, announce: `"Could not reach the update server — continuing with installed 42c-ast v<version>."` then continue.
 
 ---
 
-## Step 2 — Resolve the OAS File
+## Step 2 — Credential Check
+
+Read `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env` (Windows):
+
+```bash
+grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
+```
+
+- **`FREEMIUM_TOKEN`** is set → **Freemium mode**. Use `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>` in all commands. Proceed silently.
+- **`API_KEY`** starts with `api_` or `ide_` → **Platform mode**. Read `PLATFORM_HOST` from the same file (required — run `42crunch-setup` to reconfigure if missing). Proceed silently.
+- **`API_KEY`** is set but does **not** start with `api_` or `ide_` → warn the user: `"Your API key doesn't match the expected format (api_... or ide_...). Please check it or run 42crunch-setup to reconfigure."` Stop — do not proceed.
+- **Neither found** → call `AskUserQuestion`:
+  - **question**: `"I don't see any 42Crunch credentials configured yet. I can walk you through setup now, or you can run 42crunch-setup manually when you're ready."`
+  - **options**: `["Set up now", "Cancel — I'll run 42crunch-setup manually"]`
+  - If **Set up now** → invoke `42crunch-setup` (full setup). Do not proceed if setup fails.
+  - If **Cancel** → stop.
+
+---
+
+## Step 3 — Resolve the OAS File
 
 - If the user provided a path → use it.
 - If exactly one OAS file (`.json` or `.yaml` containing `openapi:`) is open
@@ -25,12 +51,12 @@ Read `../../references/setup-check.md` and follow it completely.
 
 ---
 
-## Step 3 — Tag Detection (platform mode only)
+## Step 4 — Tag Detection (platform mode only)
 
-Run silently. Read `../../references/tag-detection.md`. In freemium mode, skip
+Run silently. Read `./tag-detection.md`. In freemium mode, skip
 tag detection entirely. If a tag is found, announce it to the user before
 asking for permission. If no tag is found, stop as described in
-`../../references/tag-detection.md`.
+`./tag-detection.md`.
 
 ---
 
