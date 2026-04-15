@@ -56,18 +56,20 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists.
   Platform mode: include `--tag` only when a tag was resolved. Freemium mode: omit `--tag`.
   ```bash
   # Platform mode
-  API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf generate <relative-oas-path> \
+  API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf generate \
+    --output-format json \
+    --output .42c/scan/<alias>/scanconf.json \
     [--tag <category>:<tag>] \
-    --output-report .42c/scan/<alias>/scanconf.json
+    <relative-oas-path>
 
   # Freemium mode
-  <binary> scan conf generate <relative-oas-path> \
+  <binary> scan conf generate \
     --freemium-host stateless.42crunch.com:443 \
     --token <FREEMIUM_TOKEN> \
-    --output-report .42c/scan/<alias>/scanconf.json
+    --output-format json \
+    --output .42c/scan/<alias>/scanconf.json \
+    <relative-oas-path>
   ```
-  The `--output-report` flag writes only the config bundle (the `report` section) to the
-  file — no JSON wrapper.
 - Validate (use the same mode-appropriate command as above).
 - If valid: store `CONF_FILE=.42c/scan/<alias>/scanconf.json` and proceed to Step 2.
 - If invalid: surface the error to the user and stop.
@@ -927,10 +929,291 @@ Only apply fixes after explicit user confirmation.
   Aliases are not resolved by `generate` — passing an alias causes "no such file or directory".
 - **Do not use `-d` or `--conf-name`** when generating. Using those flags writes a
   fragmented multi-file format to disk instead of outputting the monolithic bundle to stdout.
-- Use `--output-report .42c/scan/<alias>/scanconf.json` to save the bundle directly.
+- Use `--output-format json --output .42c/scan/<alias>/scanconf.json` to write the config directly.
 
 ### api-reference formats accepted by `scan run` and `scan conf validate`
 
 - Path to an OAS file (`.json` / `.yaml` / `.yml`) — use with `--conf-file`
 - Alias defined in `.42c/conf.yaml` — use with `--conf-name`
 - `<api-id>:<revision>` (requires valid `API_KEY` — fetched from platform)
+
+---
+
+## Scanconf Template
+
+Generic structural reference for `scanconf.json` (version 2.0.0). Use this when building or repairing a config manually. Replace every `<placeholder>` with the API-specific value. Omit `authorizationTests` when no BOLA/BFLA candidates exist; omit `requests` when no standalone utility requests are needed.
+
+### Top-level skeleton
+
+```json
+{
+  "version": "2.0.0",
+  "runtimeConfiguration": { ... },    // standard defaults — copy verbatim from generated config
+  "customizations": { ... },           // response-policy defaults — copy verbatim
+  "environments": { ... },             // host URL + per-user credential env vars
+  "operations": { ... },               // one entry per OAS operationId
+  "authenticationDetails": [ ... ],    // bearer / apiKey / basic credential acquisition
+  "authorizationTests": { ... },       // BOLA / BFLA test definitions (optional)
+  "requests": { ... }                  // named reusable utility requests (optional)
+}
+```
+
+### `runtimeConfiguration` — key flags
+
+Copy all fields verbatim from the generated config. Two fields change during the workflow:
+
+```json
+"happyPathOnly": false,         // set true for Step 5 validation; restore to false before full scan
+"laxTestingModeEnabled": false  // never set true before happy paths are confirmed
+```
+
+### `environments.default.variables` — structure
+
+```json
+"host": {
+  "name": "SCAN42C_HOST", "from": "environment", "required": false,
+  "default": "<target-base-url>"
+},
+"<var-name>": {
+  "name": "SCAN42C_<VAR_NAME>", "from": "environment", "required": false,
+  "default": "<default-value>"
+}
+```
+
+Add one entry per credential variable (user1, user2, throwaway, etc.).
+
+---
+
+### Operation patterns
+
+#### Class-A — no auth (public endpoints: login, register)
+
+```json
+"<OperationId>": {
+  "operationId": "<OperationId>",
+  "request": {
+    "operationId": "<OperationId>",
+    "request": {
+      "type": "42c",
+      "details": {
+        "operationId": "<OperationId>",
+        "method": "<METHOD>",
+        "url": "{{host}}<path>",
+        "headers": [{ "key": "Content-Type", "value": "application/json" }],
+        "requestBody": { "mode": "json", "json": { "<field>": "{{<var>}}" } }
+      }
+    },
+    "defaultResponse": "<success-status>",
+    "responses": {
+      "<success-status>": { "expectations": { "httpStatus": <success-status> } },
+      "default": { "expectations": { "httpStatus": "default" } }
+    }
+  },
+  "scenarios": [
+    { "key": "happy.path", "fuzzing": true,
+      "requests": [{ "fuzzing": true, "$ref": "#/operations/<OperationId>/request" }] }
+  ]
+}
+```
+
+#### Class-A — with auth (standalone authenticated operations)
+
+Same as above but add `"auth": ["AccessToken"]` inside the outer `request` object (alongside `operationId` and `request`). No `before` block needed.
+
+#### Class-B — dependency chain (operation needs an ID from a prior response)
+
+```json
+"<OperationId>": {
+  "operationId": "<OperationId>",
+  "request": {
+    "operationId": "<OperationId>",
+    "auth": ["AccessToken"],
+    "request": {
+      "type": "42c",
+      "details": {
+        "operationId": "<OperationId>",
+        "method": "<METHOD>",
+        "url": "{{host}}<path>/{<id-param>}",
+        "paths": [{ "key": "<id-param>", "value": "{{<id-var>}}" }]
+      }
+    },
+    "defaultResponse": "<success-status>",
+    "responses": { ... }
+  },
+  "before": [
+    {
+      "$ref": "#/operations/<CreatorOperationId>/request",
+      "responses": {
+        "<success-status>": {
+          "expectations": { "httpStatus": <success-status> },
+          "variableAssignments": {
+            "<id-var>": {
+              "in": "body", "from": "response", "contentType": "json",
+              "path": { "type": "jsonPointer", "value": "/<id-field>" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "scenarios": [
+    { "key": "happy.path", "fuzzing": true,
+      "requests": [{ "fuzzing": true, "$ref": "#/operations/<OperationId>/request" }] }
+  ]
+}
+```
+
+To add a BOLA authorization test, append `"authorizationTests": ["<BolaTestName>"]` at the operation level.
+
+#### Class-D — throwaway user (self-destructive delete)
+
+Build the `happy.path` scenario as a 3-step chain inside `scenarios` — no `before` block:
+
+```json
+"scenarios": [
+  {
+    "key": "happy.path", "fuzzing": true,
+    "requests": [
+      {
+        "$ref": "#/operations/<RegisterOperationId>/request",
+        "environment": { "<credential-var>": "throwaway@example.com", "<password-var>": "<throwaway-value>" },
+        "responses": {
+          "201": { "expectations": { "httpStatus": 201 } },
+          "409": { "expectations": { "httpStatus": 409 } }
+        }
+      },
+      {
+        "$ref": "#/operations/<LoginOperationId>/request",
+        "environment": { "<credential-var>": "throwaway@example.com", "<password-var>": "<throwaway-value>" },
+        "responses": {
+          "200": {
+            "expectations": { "httpStatus": 200 },
+            "variableAssignments": {
+              "throwawayToken": {
+                "in": "body", "from": "response", "contentType": "json",
+                "path": { "type": "jsonPointer", "value": "/<token-field>" }
+              }
+            }
+          }
+        }
+      },
+      {
+        "fuzzing": true,
+        "$ref": "#/operations/<DeleteSelfOperationId>/request",
+        "environment": { "AccessToken": "{{throwawayToken}}" }
+      }
+    ]
+  }
+]
+```
+
+---
+
+### `authenticationDetails` — bearer token
+
+```json
+"authenticationDetails": [
+  {
+    "AccessToken": {
+      "type": "bearer",
+      "default": "User1Token",
+      "credentials": {
+        "User1Token": {
+          "credential": "{{AccessToken}}",
+          "requests": [
+            {
+              "$ref": "#/operations/<LoginOperationId>/request",
+              "responses": {
+                "200": {
+                  "expectations": { "httpStatus": 200 },
+                  "variableAssignments": {
+                    "AccessToken": {
+                      "in": "body", "from": "response", "contentType": "json",
+                      "path": { "type": "jsonPointer", "value": "/<token-field>" }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "User2Token": {
+          "credential": "{{AccessToken}}",
+          "requests": [
+            {
+              "$ref": "#/operations/<LoginOperationId>/request",
+              "environment": {
+                "<credential-var>": "{{<user2-credential-var>}}",
+                "<password-var>": "{{<user2-password-var>}}"
+              },
+              "responses": {
+                "200": {
+                  "expectations": { "httpStatus": 200 },
+                  "variableAssignments": {
+                    "AccessToken": {
+                      "in": "body", "from": "response", "contentType": "json",
+                      "path": { "type": "jsonPointer", "value": "/<token-field>" }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+]
+```
+
+User2Token uses `environment` to override the credential vars for that login step — no need to duplicate the login operation.
+
+---
+
+### `authorizationTests` — BOLA
+
+```json
+"authorizationTests": {
+  "<BolaTestName>": {
+    "key": "authentication-swapping-bola",
+    "source": ["AccessToken/User1Token"],
+    "target": ["AccessToken/User2Token"]
+  }
+}
+```
+
+---
+
+### `requests` — named utility request
+
+Use for reusable calls (e.g. cleanup deletes) referenced in `before` blocks that are not OAS operations:
+
+```json
+"requests": {
+  "<UtilityRequestName>": {
+    "request": {
+      "type": "42c",
+      "details": {
+        "method": "<METHOD>",
+        "url": "{{host}}<path>",
+        "headers": [{ "key": "Authorization", "value": "Bearer {{AccessToken}}" }]
+      }
+    },
+    "defaultResponse": "<success-status>",
+    "responses": {
+      "<success-status>": { "expectations": { "httpStatus": <success-status> } }
+    }
+  }
+}
+```
+
+---
+
+### Rules at a glance
+
+| Rule | Reason |
+|---|---|
+| Always use `$ref` in `requests` arrays — never inline `request` objects | Inline requests have no `operationId`; the VS Code extension rejects them |
+| `auth: ["AccessToken"]` goes in the outer `request` object, not inside `details` | `details` is the raw HTTP descriptor; auth injection is a scanner concern |
+| `environment` overrides in a step apply only to that step | Safe credential/variable swap without duplicating the operation |
+| Never use `"skipped": true` on Class-D operations | The scanner ignores it and deletes the primary user, breaking subsequent tests |
