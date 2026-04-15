@@ -63,6 +63,8 @@ Findings are classified into three tiers:
 - **SQG-Blocking conformance** — must fix to pass the Security Quality Gate
 - **Informational conformance** — surfaced for review
 
+Claude asks your consent before applying any fixes — both OAS contract updates and server-side code changes.
+
 **Platform mode:** SQG enforced from platform policy.  
 **Freemium mode:** All findings presented informally; you decide what to fix.
 

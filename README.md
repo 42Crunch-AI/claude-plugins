@@ -73,7 +73,7 @@ Findings are classified into three tiers:
 - **SQG-Blocking conformance** (orange) — must fix to pass the Security Quality Gate
 - **Informational conformance** (yellow) — surfaced for review; not auto-fixed
 
-Claude asks for your consent before applying any OAS changes.
+Claude asks for your consent before applying any fixes — both OAS contract updates and server-side code changes.
 
 **Platform mode:** SQG is enforced from the platform policy.
 
@@ -81,7 +81,7 @@ Claude asks for your consent before applying any OAS changes.
 
 If no OAS file is open or provided, Claude offers to generate one from your source code using the `code-to-oas` skill before continuing.
 
-**Trigger phrases:** "run scan", "conformance test", "BOLA test", "BFLA test", "scan config"
+**Trigger phrases:** "run scan", "scan only", "conformance test", "BOLA test", "BFLA test", "42crunch scan", "scan config"
 
 ---
 
@@ -89,7 +89,7 @@ If no OAS file is open or provided, Claude offers to generate one from your sour
 
 Orchestrates the Audit and Scan skills in sequence as Phase 1 and Phase 2. Verifies the environment (binary + credentials), resolves the OAS file, and confirms the scan target URL with a reachability check — all before Phase 1 begins. Each phase requires separate user consent. Before Phase 2, Claude runs a silent OAS analysis and presents a scan configuration preview (target URL, operation count, auth schemes, BOLA candidates, sample data availability) so you know exactly what the scan setup will involve. Produces a combined summary at the end covering both phases.
 
-**Trigger phrases:** "run audit and scan", "full 42crunch pipeline", "SQG"
+**Trigger phrases:** "run audit and scan", "full 42crunch pipeline", "full security check", "audit then scan", "SQG"
 
 ---
 

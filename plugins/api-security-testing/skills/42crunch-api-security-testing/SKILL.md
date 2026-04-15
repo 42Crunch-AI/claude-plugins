@@ -156,8 +156,8 @@ Phase 2 — Scan Complete
   SQG:            PASSED  (Security-Guardrails — your org's security quality gate is met)    ← platform, passed
   SQG:            FAILED  (Security-Guardrails — the quality gate is not met; fixes above are required)    ← platform, failed
   SQG:            N/A  (Freemium — scan findings are informational; no gate enforced)    ← freemium mode
-  Authorization:  BOLA confirmed on 1 operation — fixed in OAS
-  Conformance:    1 SQG-blocking issue fixed · 3 informational findings surfaced
+  Authorization:  BOLA confirmed on 1 operation — OAS updated · server-side fix applied
+  Conformance:    1 SQG-blocking issue fixed (OAS + code) · 3 informational findings surfaced
   OAS updated:    <path/to/openapi.json>
 ```
 

@@ -124,8 +124,8 @@ Scan Complete
   SQG:            FAILED  (Security-Guardrails — the quality gate is not met; fixes above are required)    ← platform mode, failed
   SQG:            N/A  (Freemium — scan findings are informational; no gate enforced)    ← freemium mode
   Tag:            <category>:<tagname>             ← platform mode only
-  Authorization:  BOLA confirmed on 1 operation — fixed in OAS
-  Conformance:    1 SQG-blocking issue fixed · 3 informational findings surfaced
+  Authorization:  BOLA confirmed on 1 operation — OAS updated · server-side fix applied
+  Conformance:    1 SQG-blocking issue fixed (OAS + code) · 3 informational findings surfaced
   OAS updated:    <path/to/openapi.json>
 ```
 
