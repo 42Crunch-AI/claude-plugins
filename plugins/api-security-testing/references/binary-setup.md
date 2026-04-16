@@ -24,9 +24,15 @@ Resolve the canonical path for the current OS:
 
 - Binary **missing or broken** (`--version` exits non-zero or file absent) →
   continue to **Step 1** (detect OS/arch).
-- Binary **present** and `--version` exits 0 → continue to **Step 2**
-  (fetch manifest and compare versions). Do **not** exit — always verify that
-  the installed version is current before declaring setup complete.
+- Binary **present** and `--version` exits 0 → capture the installed version:
+
+  ```bash
+  INSTALLED_VERSION=$("$BINARY_PATH" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+  ```
+
+  Then continue to **Step 2** (fetch manifest and compare versions). Do **not**
+  exit — always verify that the installed version is current before declaring
+  setup complete.
 
 ---
 
@@ -80,11 +86,12 @@ matching `PLATFORM_KEY`. From the matching entry, extract:
 | Field | Variable |
 |-------|----------|
 | `version` | `LATEST_VERSION` |
-| `url` | `DOWNLOAD_URL` |
+| `downloadUrl` | `DOWNLOAD_URL` |
 | `sha256` | `EXPECTED_SHA256` |
 
 ```bash
-python3 << 'EOF'
+if command -v python3 &>/dev/null; then
+  MANIFEST_OUTPUT=$(python3 - "$PLATFORM_KEY" << 'EOF'
 import json, sys
 with open("/tmp/42c-ast-manifest.json") as f:
     entries = json.load(f)
@@ -94,13 +101,25 @@ if not match:
     print(f"ERROR: no manifest entry for {platform}", file=sys.stderr)
     sys.exit(1)
 print(match["version"])
-print(match["url"])
+print(match["downloadUrl"])
 print(match["sha256"])
 EOF
-"$PLATFORM_KEY"
+)
+elif command -v jq &>/dev/null; then
+  MANIFEST_OUTPUT=$(printf '%s\n%s\n%s\n' \
+    "$(jq -r --arg p "$PLATFORM_KEY" '.[] | select(.architecture==$p) | .version' /tmp/42c-ast-manifest.json)" \
+    "$(jq -r --arg p "$PLATFORM_KEY" '.[] | select(.architecture==$p) | .downloadUrl' /tmp/42c-ast-manifest.json)" \
+    "$(jq -r --arg p "$PLATFORM_KEY" '.[] | select(.architecture==$p) | .sha256'  /tmp/42c-ast-manifest.json)")
+else
+  echo "ERROR: python3 or jq is required to parse the manifest"; exit 1
+fi
+
+LATEST_VERSION=$(echo "$MANIFEST_OUTPUT" | sed -n '1p')
+DOWNLOAD_URL=$(echo "$MANIFEST_OUTPUT"   | sed -n '2p')
+EXPECTED_SHA256=$(echo "$MANIFEST_OUTPUT" | sed -n '3p')
 ```
 
-If the installed version (from Step 0) equals `LATEST_VERSION` → binary is
+If `INSTALLED_VERSION` (from Step 0) equals `LATEST_VERSION` → binary is
 up to date. Skip Step 3 and return to the caller.
 
 If the installed version is older (or the binary was absent) → continue to
