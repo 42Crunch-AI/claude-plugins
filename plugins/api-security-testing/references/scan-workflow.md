@@ -357,13 +357,26 @@ The operation destroys the currently authenticated principal's own resource
 execute the operation against User1, deleting the primary test user and
 breaking all subsequent happy paths in the same run.
 
-Instead: build a multi-step `happy.path` scenario that:
-1. Registers a fresh throwaway user (accept both 201 and 409 — idempotent).
-2. Logs in as the throwaway user and captures their token.
-3. Executes the destructive operation using the throwaway token (override the
-   primary token variable for that step via `environment`).
+**Do NOT use `environment` overrides on the token variable** — the
+`authenticationDetails` credential tokens are acquired and cached at session
+start. Overriding the variable at step level does not change which cached
+credential is injected; the operation will still run as User1.
 
-This leaves User1 intact while still validating the operation.
+Instead:
+1. Add a named throwaway credential to `authenticationDetails` with a
+   register + login acquisition chain.
+2. Set `"auth": ["AccessToken/<throwaway-credential-name>"]` **directly on
+   the operation's `request` definition** — using `Scheme/CredentialName`
+   notation. Do not use the default credential.
+3. Build a 2-step `happy.path` scenario:
+   - Step 1: run the destructive operation (it authenticates as the throwaway
+     via the operation's `auth` setting).
+   - Step 2: re-register the throwaway user (with environment overrides for
+     the throwaway credentials) so subsequent fuzzing iterations can
+     authenticate again.
+
+This leaves User1 intact while still validating the operation across
+multiple fuzzing iterations.
 
 ### Example classification table
 
@@ -464,66 +477,129 @@ block. If the operation is not in the table, ask the user to paste the values.
 
 ### Class-D: throwaway-user pattern
 
-For operations that delete the primary user's own account, build a 3-step
-throwaway chain. First, parameterise the registration operation's request body
-so `email` and credential fields use template variables (e.g.
-`{{throwawayEmail}}`, `{{throwawayPan}}`), with defaults set in
-`environments.default.variables`. Then inject the scenario:
+For operations that delete the primary user's own account, the throwaway
+credential must be fully defined in `authenticationDetails` and the operation
+must reference it directly. The scenario then re-creates the throwaway after
+deletion so subsequent fuzzing iterations can still authenticate.
+
+**Step A — Add the throwaway credential to `authenticationDetails`**
+
+Inside the `AccessToken` credentials map, add a named throwaway entry with a
+register + login acquisition chain. The register step should accept both 201
+(created) and 409 (already exists — idempotent):
 
 ```json
-"<DeleteSelfOperationId>": {
-  "operationId": "<DeleteSelfOperationId>",
-  "scenarios": [
+"<throwaway-credential-name>": {
+  "credential": "{{AccessToken}}",
+  "requests": [
     {
-      "key": "happy.path",
-      "fuzzing": true,
-      "requests": [
-        {
-          "$ref": "#/operations/<RegisterOperationId>/request",
-          "environment": {
-            "<emailVar>": "throwaway@example.com",
-            "<credentialVar>": "<throwawayCredential>"
-          },
-          "responses": {
-            "201": { "expectations": { "httpStatus": 201 } },
-            "409": { "expectations": { "httpStatus": 409 } }
-          }
-        },
-        {
-          "$ref": "#/operations/<LoginOperationId>/request",
-          "environment": {
-            "host": "{{host}}",
-            "username": "throwaway@example.com",
-            "password": "<throwawayCredential>"
-          },
-          "responses": {
-            "200": {
-              "expectations": { "httpStatus": 200 },
-              "variableAssignments": {
-                "throwawayToken": {
-                  "in": "body", "from": "response", "contentType": "json",
-                  "path": { "type": "jsonPointer", "value": "/<tokenField>" }
-                }
-              }
+      "$ref": "#/operations/<RegisterOperationId>/request",
+      "environment": {
+        "<emailVar>": "<throwaway@example.com>",
+        "<credentialVar>": "<throwawayCredential>"
+      },
+      "responses": {
+        "201": { "expectations": { "httpStatus": 201 } },
+        "409": { "expectations": { "httpStatus": 409 } }
+      }
+    },
+    {
+      "$ref": "#/operations/<LoginOperationId>/request",
+      "environment": {
+        "<emailVar>": "<throwaway@example.com>",
+        "<credentialVar>": "<throwawayCredential>"
+      },
+      "responses": {
+        "200": {
+          "expectations": { "httpStatus": 200 },
+          "variableAssignments": {
+            "AccessToken": {
+              "in": "body", "from": "response", "contentType": "json",
+              "path": { "type": "jsonPointer", "value": "/<tokenField>" }
             }
           }
-        },
-        {
-          "$ref": "#/operations/<DeleteSelfOperationId>/request",
-          "environment": {
-            "<primaryTokenVar>": "{{throwawayToken}}"
-          },
-          "fuzzing": true
         }
-      ]
+      }
     }
   ]
 }
 ```
 
-The last step overrides the primary user's token variable (e.g. `user1Token`)
-with `throwawayToken` so the `AccessToken/User1` credential sends the
-throwaway's JWT. User1 remains untouched.
+**Step B — Set `auth` on the operation definition itself**
+
+Use `Scheme/CredentialName` notation directly on the operation's `request`
+block — not as a scenario-step override:
+
+```json
+"<DeleteSelfOperationId>": {
+  "operationId": "<DeleteSelfOperationId>",
+  "request": {
+    "operationId": "<DeleteSelfOperationId>",
+    "auth": ["AccessToken/<throwaway-credential-name>"],
+    "request": { ... }
+  },
+  ...
+}
+```
+
+**Step C — Build a 2-step scenario: delete, then re-register**
+
+```json
+"scenarios": [
+  {
+    "key": "happy.path",
+    "fuzzing": true,
+    "requests": [
+      {
+        "fuzzing": true,
+        "$ref": "#/operations/<DeleteSelfOperationId>/request"
+      },
+      {
+        "$ref": "#/operations/<RegisterOperationId>/request",
+        "environment": {
+          "<emailVar>": "<throwaway@example.com>",
+          "<credentialVar>": "<throwawayCredential>"
+        },
+        "responses": {
+          "201": { "expectations": { "httpStatus": 201 } }
+        }
+      }
+    ]
+  }
+]
+```
+
+Step 1 deletes the throwaway (the operation's `auth` ensures only the throwaway
+credential is used — User1 is never touched). Step 2 immediately re-registers
+the throwaway so the next fuzzing iteration can acquire a fresh token via the
+`authenticationDetails` chain.
+
+**Step D — Add a utility request for idempotent pre-cleanup (optional)**
+
+If the register operation rejects existing accounts (no 409 tolerance), add a
+named utility request to the `requests` section that deletes any pre-existing
+throwaway account, then reference it in the register operation's `before` block:
+
+```json
+"requests": {
+  "<DeleteThrowawayUtil>": {
+    "request": {
+      "type": "42c",
+      "details": {
+        "method": "DELETE",
+        "url": "{{host}}<delete-path>",
+        "headers": [{ "key": "Authorization", "value": "Bearer {{AccessToken}}" }]
+      }
+    },
+    "defaultResponse": "200",
+    "responses": { "200": { "expectations": { "httpStatus": 200 } } }
+  }
+}
+```
+
+Then in the register operation's `before` block: login as the throwaway → call
+`<DeleteThrowawayUtil>` → the register step in the happy path always finds a
+clean slate.
 
 ### BOLA test scenario pattern (BOLA? = yes operations)
 
