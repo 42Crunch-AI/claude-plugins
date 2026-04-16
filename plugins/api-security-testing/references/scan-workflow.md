@@ -1201,47 +1201,112 @@ Same as above but add `"auth": ["AccessToken"]` inside the outer `request` objec
 
 To add a BOLA authorization test, append `"authorizationTests": ["<BolaTestName>"]` at the operation level.
 
-#### Class-D — throwaway user (self-destructive delete)
+#### Resource-restoring `after` block (non-self-destructive deletes)
 
-Build the `happy.path` scenario as a 3-step chain inside `scenarios` — no `before` block:
+For delete operations that remove a resource owned by User1 (e.g.
+`DELETE /account/products/cards/{id}`) but do NOT delete User1 themselves,
+use an `after` block to recreate the resource after each test run so subsequent
+fuzzing iterations find it:
 
 ```json
-"scenarios": [
-  {
-    "key": "happy.path", "fuzzing": true,
-    "requests": [
-      {
-        "$ref": "#/operations/<RegisterOperationId>/request",
-        "environment": { "<credential-var>": "throwaway@example.com", "<password-var>": "<throwaway-value>" },
-        "responses": {
-          "201": { "expectations": { "httpStatus": 201 } },
-          "409": { "expectations": { "httpStatus": 409 } }
-        }
-      },
-      {
-        "$ref": "#/operations/<LoginOperationId>/request",
-        "environment": { "<credential-var>": "throwaway@example.com", "<password-var>": "<throwaway-value>" },
-        "responses": {
-          "200": {
-            "expectations": { "httpStatus": 200 },
-            "variableAssignments": {
-              "throwawayToken": {
-                "in": "body", "from": "response", "contentType": "json",
-                "path": { "type": "jsonPointer", "value": "/<token-field>" }
-              }
+"<DeleteResourceOperationId>": {
+  "operationId": "<DeleteResourceOperationId>",
+  "request": { ... },
+  "before": [
+    {
+      "$ref": "#/operations/<GetResourceOperationId>/request",
+      "responses": {
+        "200": {
+          "expectations": { "httpStatus": 200 },
+          "variableAssignments": {
+            "<resourceId>": {
+              "in": "body", "from": "response", "contentType": "json",
+              "path": { "type": "jsonPointer", "value": "/<id-field>" }
             }
           }
         }
-      },
-      {
-        "fuzzing": true,
-        "$ref": "#/operations/<DeleteSelfOperationId>/request",
-        "environment": { "AccessToken": "{{throwawayToken}}" }
       }
-    ]
-  }
-]
+    }
+  ],
+  "after": [
+    {
+      "$ref": "#/operations/<CreateResourceOperationId>/request",
+      "responses": {
+        "200": {
+          "expectations": { "httpStatus": 200 },
+          "variableAssignments": {
+            "<resourceId>": {
+              "in": "body", "from": "response", "contentType": "json",
+              "path": { "type": "jsonPointer", "value": "/<id-field>" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "key": "happy.path", "fuzzing": true,
+      "requests": [{ "fuzzing": true, "$ref": "#/operations/<DeleteResourceOperationId>/request" }]
+    }
+  ]
+}
 ```
+
+The `before` block fetches a valid resource ID; the `after` block recreates it.
+This keeps the test environment consistent across fuzzing iterations without
+needing a throwaway user.
+
+#### Class-D — throwaway user (self-destructive delete)
+
+The operation's `auth` field pins the throwaway credential directly.
+The `happy.path` scenario is a 2-step chain: delete → re-register.
+No `before` block on this operation is needed.
+
+```json
+"<DeleteSelfOperationId>": {
+  "operationId": "<DeleteSelfOperationId>",
+  "request": {
+    "operationId": "<DeleteSelfOperationId>",
+    "auth": ["AccessToken/<throwaway-credential-name>"],
+    "request": {
+      "type": "42c",
+      "details": {
+        "operationId": "<DeleteSelfOperationId>",
+        "method": "DELETE",
+        "url": "{{host}}<path>"
+      }
+    },
+    "defaultResponse": "<success-status>",
+    "responses": { ... }
+  },
+  "scenarios": [
+    {
+      "key": "happy.path", "fuzzing": true,
+      "requests": [
+        {
+          "fuzzing": true,
+          "$ref": "#/operations/<DeleteSelfOperationId>/request"
+        },
+        {
+          "$ref": "#/operations/<RegisterOperationId>/request",
+          "environment": {
+            "<emailVar>": "<throwaway@example.com>",
+            "<credentialVar>": "<throwaway-value>"
+          },
+          "responses": {
+            "201": { "expectations": { "httpStatus": 201 } }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+Step 1 deletes the throwaway user (enforced by `auth` on the operation — User1
+is never used). Step 2 immediately re-creates the throwaway so subsequent
+fuzzing iterations can re-authenticate via the `authenticationDetails` chain.
 
 ---
 
@@ -1295,6 +1360,40 @@ Build the `happy.path` scenario as a 3-step chain inside `scenarios` — no `bef
               }
             }
           ]
+        },
+        "<throwaway-credential-name>": {
+          "credential": "{{AccessToken}}",
+          "requests": [
+            {
+              "$ref": "#/operations/<RegisterOperationId>/request",
+              "environment": {
+                "<emailVar>": "<throwaway@example.com>",
+                "<credentialVar>": "<throwaway-value>"
+              },
+              "responses": {
+                "201": { "expectations": { "httpStatus": 201 } },
+                "409": { "expectations": { "httpStatus": 409 } }
+              }
+            },
+            {
+              "$ref": "#/operations/<LoginOperationId>/request",
+              "environment": {
+                "<emailVar>": "<throwaway@example.com>",
+                "<credentialVar>": "<throwaway-value>"
+              },
+              "responses": {
+                "200": {
+                  "expectations": { "httpStatus": 200 },
+                  "variableAssignments": {
+                    "AccessToken": {
+                      "in": "body", "from": "response", "contentType": "json",
+                      "path": { "type": "jsonPointer", "value": "/<token-field>" }
+                    }
+                  }
+                }
+              }
+            }
+          ]
         }
       }
     }
@@ -1302,7 +1401,8 @@ Build the `happy.path` scenario as a 3-step chain inside `scenarios` — no `bef
 ]
 ```
 
-User2Token uses `environment` to override the credential vars for that login step — no need to duplicate the login operation.
+- `User2Token` uses `environment` to override credential vars for the login step — no need to duplicate the login operation.
+- `<throwaway-credential-name>` acquires its token via register + login at session start. The register step accepts both 201 and 409 so the acquisition is idempotent. The operation that uses this credential sets `"auth": ["AccessToken/<throwaway-credential-name>"]` directly on its `request` definition — not as a scenario-step override.
 
 ---
 
@@ -1353,3 +1453,7 @@ Use for reusable calls (e.g. cleanup deletes) referenced in `before` blocks that
 | `auth: ["AccessToken"]` goes in the outer `request` object, not inside `details` | `details` is the raw HTTP descriptor; auth injection is a scanner concern |
 | `environment` overrides in a step apply only to that step | Safe credential/variable swap without duplicating the operation |
 | Never use `"skipped": true` on Class-D operations | The scanner ignores it and deletes the primary user, breaking subsequent tests |
+| Never override the token variable via `environment` to swap credentials on a Class-D operation | `authenticationDetails` tokens are cached at session start; environment overrides do not change which cached token is injected |
+| Class-D operations: set `"auth": ["AccessToken/<throwaway>"]` on the operation definition, not as a scenario-step override | The credential must be pinned at the operation level so the scanner uses the throwaway for ALL execution paths — happy path, fuzzing, and authorization tests |
+| Class-D scenarios: re-register the throwaway as the final step | Ensures subsequent fuzzing iterations can re-authenticate; without this, the throwaway is permanently deleted after the first iteration |
+| Non-self-destructive deletes: use `after` block to recreate the resource | Keeps the test environment consistent across fuzzing iterations without a throwaway user |
