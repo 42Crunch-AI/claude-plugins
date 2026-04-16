@@ -10,6 +10,23 @@ AI-powered API security for Claude Code, backed by 42Crunch — audit OpenAPI sp
 - **42crunch-api-security-testing** — Full audit + scan pipeline in a single session
 - **code-to-oas** — Generate a complete `openapi.json` from your API source code
 
+## Installation
+
+Add the 42Crunch marketplace and install the plugin in one step:
+
+```
+/plugin marketplace add 42crunch-AI/claude-plugin
+/plugin install api-security-testing@42crunch-marketplace
+```
+
+To install at project scope (shared with your team via `.claude/settings.json`):
+
+```
+/plugin install api-security-testing@42crunch-marketplace --scope project
+```
+
+---
+
 ## Prerequisites
 
 - [Claude Code](https://claude.ai/code) (CLI, desktop app, or IDE extension)

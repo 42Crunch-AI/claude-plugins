@@ -122,13 +122,46 @@ Credentials are read exclusively from `~/.42crunch/conf/env` (macOS/Linux) or `%
 
 Credentials are never printed in plaintext after entry. The env file is stored with `600` permissions on macOS/Linux.
 
+## Installation
+
+### 1. Add the marketplace
+
+Run the following command inside Claude Code (CLI, desktop app, or IDE extension):
+
+```
+/plugin marketplace add 42crunch-AI/claude-plugin
+```
+
+This registers the 42Crunch marketplace from GitHub. Claude Code fetches the marketplace manifest and makes the `api-security-testing` plugin available for installation.
+
+### 2. Install the plugin
+
+```
+/plugin install api-security-testing@42crunch-marketplace
+```
+
+The plugin installs to your user scope by default (`~/.claude/settings.json`), making it available across all your projects. To install at project scope instead (committed to `.claude/settings.json` and shared with your team):
+
+```
+/plugin install api-security-testing@42crunch-marketplace --scope project
+```
+
+### 3. Verify
+
+```
+/plugin list
+```
+
+You should see `api-security-testing` listed as installed.
+
+---
+
 ## Getting Started
 
-1. **Install the plugin** — point Claude Code at this marketplace repository.
-2. **Run setup** — ask Claude: *"set up 42crunch"*. Claude will install the `42c-ast` binary and walk you through credential configuration.
-3. **Audit your API** — ask Claude: *"run a 42Crunch audit on my OpenAPI spec"*. If you don't have an OAS file yet, Claude will offer to generate one from your source code first.
-4. **Fix issues** — Claude presents findings and asks your consent before applying any changes.
-5. **Scan your API** — ask Claude: *"run a conformance scan"* against your running server.
+1. **Run setup** — ask Claude: *"set up 42crunch"*. Claude will install the `42c-ast` binary and walk you through credential configuration.
+2. **Audit your API** — ask Claude: *"run a 42Crunch audit on my OpenAPI spec"*. If you don't have an OAS file yet, Claude will offer to generate one from your source code first.
+3. **Fix issues** — Claude presents findings and asks your consent before applying any changes.
+4. **Scan your API** — ask Claude: *"run a conformance scan"* against your running server.
 
 ## License
 
