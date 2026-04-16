@@ -57,7 +57,7 @@ After presenting findings, Claude asks for your explicit consent before applying
 
 If no OAS file is open or provided, Claude offers to generate one from your source code using the `code-to-oas` skill before continuing.
 
-**Trigger phrases:** "run audit", "42crunch audit", "fix audit issues", "SQG audit", "audit score"
+**Trigger phrases:** "run audit", "audit only", "42crunch audit", "fix audit issues", "SQG audit", "audit score"
 
 ---
 
@@ -89,15 +89,15 @@ If no OAS file is open or provided, Claude offers to generate one from your sour
 
 Orchestrates the Audit and Scan skills in sequence as Phase 1 and Phase 2. Verifies the environment (binary + credentials), resolves the OAS file, and confirms the scan target URL with a reachability check — all before Phase 1 begins. Each phase requires separate user consent. Before Phase 2, Claude runs a silent OAS analysis and presents a scan configuration preview (target URL, operation count, auth schemes, BOLA candidates, sample data availability) so you know exactly what the scan setup will involve. Produces a combined summary at the end covering both phases.
 
-**Trigger phrases:** "run audit and scan", "full 42crunch pipeline", "full security check", "audit then scan", "SQG"
+**Trigger phrases:** "run audit and scan", "full 42crunch pipeline", "full security check", "audit then scan", "42crunch", "SQG"
 
 ---
 
 ### `code-to-oas` — Generate an OpenAPI Spec from Source Code
 
-Analyzes your API codebase (read-only) and produces a complete `openapi.json`. Supports all major frameworks including Express, FastAPI, Flask, Django, NestJS, Spring Boot, Gin, Echo, Chi, Rails, Sinatra, and .NET. Detects routes, parameters, request/response schemas, auth middleware, data models, and server config. Performs a self-review pass before writing the file.
+Analyzes your API codebase (read-only) and produces a complete `openapi.json`. Supports all major frameworks including Express, Fastify, Koa, Hapi, NestJS, FastAPI, Flask, Django, Starlette, Spring Boot, Quarkus, Micronaut, Gin, Echo, Chi, Gorilla/mux, Rails, Sinatra, Grape, ASP.NET Core, and more. Detects routes, parameters, request/response schemas, auth middleware, data models, and server config. Performs a self-review pass before writing the file.
 
-**Trigger phrases:** "generate OAS from code", "create OpenAPI spec", "document my API"
+**Trigger phrases:** "generate OAS from code", "create OpenAPI spec", "document my API", "reverse-engineer spec", "write openapi.json from my codebase"
 
 ---
 

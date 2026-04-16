@@ -68,7 +68,7 @@ Claude asks your consent before applying any fixes — both OAS contract updates
 **Platform mode:** SQG enforced from platform policy.  
 **Freemium mode:** All findings presented informally; you decide what to fix.
 
-> **Trigger:** "run scan", "conformance test", "BOLA test", "BFLA test", "42crunch scan", "scan config"
+> **Trigger:** "run scan", "scan only", "conformance test", "BOLA test", "BFLA test", "42crunch scan", "scan config"
 
 ---
 
@@ -86,7 +86,7 @@ Analyses your API codebase and generates a complete `openapi.json`. Detects rout
 
 Supported frameworks: Express, Fastify, Koa, Hapi, NestJS, FastAPI, Flask, Django, Starlette, Spring Boot, Quarkus, Micronaut, Gin, Echo, Chi, Gorilla/mux, Rails, Sinatra, Grape, ASP.NET Core, and more.
 
-> **Trigger:** "generate OAS from code", "create OpenAPI spec", "document my API", "reverse-engineer spec"
+> **Trigger:** "generate OAS from code", "create OpenAPI spec", "document my API", "reverse-engineer spec", "write openapi.json from my codebase"
 
 ---
 
