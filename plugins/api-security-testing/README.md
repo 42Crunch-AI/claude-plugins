@@ -1,31 +1,20 @@
-# api-security-testing
+# 42Crunch API Security Plugin
 
-AI-powered API security for Claude Code, backed by 42Crunch — audit OpenAPI specs, detect OWASP API Security vulnerabilities, run live conformance and authorization scans, and apply fixes, all through natural language.
+Automate API security directly in Claude Code with 42Crunch - audit OpenAPI specs, detect vulnerabilities aligned with OWASP API Security risks (including BOLA/BFLA), and apply AI-powered fixes.
 
-## What you get
+## Overview
 
-- **42crunch-setup** — Install the `42c-ast` binary and configure credentials (one-time)
-- **42crunch-audit** — Static security audit of an OpenAPI Specification file with scored findings and AI-assisted fixes
-- **42crunch-scan** — Live conformance and authorization scan (BOLA/BFLA) against a running API
-- **42crunch-api-security-testing** — Full audit + scan pipeline in a single session
-- **code-to-oas** — Generate a complete `openapi.json` from your API source code
+The `api-security-testing` plugin is designed for AI-assisted development workflows, it provides continuous guardrails through an **audit->scan->remediate->validate** loop, ensuring APIs meet enterprise security standards before deployment.
 
-## Installation
+## Commands
 
-Add the 42Crunch marketplace and install the plugin in one step:
-
-```
-/plugin marketplace add 42crunch-AI/claude-plugin
-/plugin install api-security-testing@42crunch-marketplace
-```
-
-To install at project scope (shared with your team via `.claude/settings.json`):
-
-```
-/plugin install api-security-testing@42crunch-marketplace --scope project
-```
-
----
+| Skill | Description |
+|---|---|
+| [`/42crunch-setup`](./README.md#42crunch-setup) | Install the `42c-ast` binary and configure credentials (one-time) |
+| [`/42crunch-audit`](./README.md#42crunch-audit) | Static security audit of an OpenAPI Specification file with scored findings and AI-assisted fixes |
+| [`/42crunch-scan`](./README.md#42crunch-scan) | Live conformance and authorization scan (BOLA/BFLA) against a running API |
+| [`/42crunch-api-security-testing`](./README.md#42crunch-api-security-testing) | Full audit + scan pipeline in a single session |
+| [`/code-to-oas`](./README.md#code-to-oas) | Generate a complete `openapi.json` from your API source code| 
 
 ## Prerequisites
 
@@ -35,7 +24,21 @@ To install at project scope (shared with your team via `.claude/settings.json`):
 
 The `42c-ast` binary is downloaded and kept up to date automatically on first use.
 
-## Getting Started
+## Installation
+
+Add the 42Crunch marketplace:
+
+```
+/plugin marketplace add 42Crunch-AI/claude-plugins
+```
+
+Install the `api-security-testing` plugin:
+
+```
+/plugin install api-security-testing@42crunch-marketplace
+```
+
+## Quick Start
 
 1. **Install the plugin** — add this marketplace to Claude Code.
 2. **Set up the environment** — say: *"set up 42crunch"*
@@ -50,6 +53,11 @@ The `42c-ast` binary is downloaded and kept up to date automatically on first us
 Installs the `42c-ast` binary for your OS/architecture, verifies its checksum, and walks you through credential configuration. Supports Platform (API key) and Freemium (token) modes. Credentials are stored in `~/.42crunch/conf/env` with `600` permissions.
 
 > **Trigger:** "set up 42crunch", "configure 42crunch", "install 42c-ast", "update 42c-ast", "set api key", "42crunch not working", "binary not found"
+
+**Usage:**
+```
+/42crunch-setup
+```
 
 ---
 
@@ -67,6 +75,11 @@ Claude asks your explicit consent before applying any changes, then re-runs the 
 **Freemium mode:** No automated SQG gate; you set the target score and blocking severity for the session.
 
 > **Trigger:** "run audit", "42crunch audit", "fix audit issues", "SQG audit", "audit score"
+
+**Usage:**
+```
+/42crunch-audit
+```
 
 ---
 
@@ -87,6 +100,11 @@ Claude asks your consent before applying any fixes — both OAS contract updates
 
 > **Trigger:** "run scan", "scan only", "conformance test", "BOLA test", "BFLA test", "42crunch scan", "scan config"
 
+**Usage:**
+```
+/42crunch-scan
+```
+
 ---
 
 ### `42crunch-api-security-testing`
@@ -94,6 +112,11 @@ Claude asks your consent before applying any fixes — both OAS contract updates
 Orchestrates Audit (Phase 1) and Scan (Phase 2) in sequence. Resolves the OAS file and confirms the scan target URL up front. Each phase requires separate user consent. Produces a combined summary covering both phases.
 
 > **Trigger:** "run audit and scan", "full 42crunch pipeline", "full security check", "audit then scan", "SQG"
+
+**Usage:**
+```
+/42crunch-api-security-testing
+```
 
 ---
 
@@ -104,6 +127,11 @@ Analyses your API codebase and generates a complete `openapi.json`. Detects rout
 Supported frameworks: Express, Fastify, Koa, Hapi, NestJS, FastAPI, Flask, Django, Starlette, Spring Boot, Quarkus, Micronaut, Gin, Echo, Chi, Gorilla/mux, Rails, Sinatra, Grape, ASP.NET Core, and more.
 
 > **Trigger:** "generate OAS from code", "create OpenAPI spec", "document my API", "reverse-engineer spec", "write openapi.json from my codebase"
+
+**Usage:**
+```
+/code-to-oas
+```
 
 ---
 
@@ -120,12 +148,15 @@ Credentials are read from `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42C
 
 Credentials are never printed in plaintext after entry.
 
+---
+
 ## Links
 
+- [42Crunch](https://42crunch.com/)
 - [42Crunch Documentation](https://docs.42crunch.com)
 - [42Crunch on GitHub](https://github.com/42Crunch)
 - Support: support@42crunch.com
 
 ## License
 
-Apache 2.0
+Apache 2.0 — see [LICENSE](./LICENSE) for details.
