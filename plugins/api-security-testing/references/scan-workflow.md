@@ -710,19 +710,33 @@ to `true` before happy paths are confirmed — in lax mode, fuzzing runs even on
 operations with failing happy paths, producing a cascade of false positives.
 
 ```bash
-# Platform mode
+# macOS / Linux — Platform mode
 API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
 
-# Freemium mode
+# macOS / Linux — Freemium mode
 <binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
   --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
 ```
 
+```powershell
+# Windows — Platform mode
+$env:API_KEY="<value>"; $env:PLATFORM_HOST="<value>"
+& <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE> `
+  > "$env:TEMP\42c-happy-out.json" 2>&1
+
+# Windows — Freemium mode
+& <binary> scan run --enrich=false <relative-oas-path> `
+  --freemium-host stateless.42crunch.com:443 `
+  --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE> `
+  > "$env:TEMP\42c-happy-out.json" 2>&1
+```
+
 Extract only failing happy paths — never include raw output in your response:
 
 ```bash
+# macOS / Linux
 python3 << 'EOF'
 import json, re
 raw = open("/tmp/42c-happy-out.json").read()
@@ -746,6 +760,34 @@ if fails:
 else:
     print("happy_path_failures: none")
 EOF
+```
+
+```powershell
+# Windows
+python3 -c "
+import json, re, os
+raw = open(os.path.join(os.environ['TEMP'], '42c-happy-out.json')).read()
+match = re.search(r'\{[\s\S]*\}', raw)
+if not match:
+    print('No JSON in output')
+    exit(0)
+data = json.loads(match.group())
+results = data.get('results', data.get('scanResults', []))
+if isinstance(results, dict):
+    results = [results]
+fails = [
+    (r.get('operationId', r.get('path','?')), t.get('testKey','?'), t.get('httpStatus',''), t.get('reason',''))
+    for r in results
+    for t in r.get('testResults', [])
+    if t.get('status') == 'fail' and 'happy' in t.get('testKey','').lower()
+]
+if fails:
+    print(f'happy_path_failures[{len(fails)}]{{operation,test,status,reason}}:')
+    for op, test, code, reason in fails:
+        print(f'  {op},{test},{code},{reason[:60]}')
+else:
+    print('happy_path_failures: none')
+"
 ```
 
 ### Parse results per operation
@@ -773,7 +815,7 @@ failing operation before requesting manual input.
 
 ### Iteration
 
-After resolving each batch of failures, re-run using the same command as above (output to `/tmp/42c-happy-out.json`) and re-extract with the same Python snippet.
+After resolving each batch of failures, re-run using the same command as above (output to `/tmp/42c-happy-out.json` on macOS/Linux, `%TEMP%\42c-happy-out.json` on Windows) and re-extract with the same Python snippet.
 
 For each operation where the root cause cannot be resolved (e.g. the required
 resource cannot be created in this environment), call `AskUserQuestion`:
@@ -812,14 +854,27 @@ Only proceed to Step 6 after explicit confirmation.
 Run the full scan, capturing output to a temp file for extraction:
 
 ```bash
-# Platform mode
+# macOS / Linux — Platform mode
 API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
 
-# Freemium mode
+# macOS / Linux — Freemium mode
 <binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
   --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
+```
+
+```powershell
+# Windows — Platform mode
+$env:API_KEY="<value>"; $env:PLATFORM_HOST="<value>"
+& <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE> `
+  > "$env:TEMP\42c-scan-out.json" 2>&1
+
+# Windows — Freemium mode
+& <binary> scan run --enrich=false <relative-oas-path> `
+  --freemium-host stateless.42crunch.com:443 `
+  --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE> `
+  > "$env:TEMP\42c-scan-out.json" 2>&1
 ```
 
 **Immediately after the command completes**, extract the summary as TOON
@@ -827,6 +882,7 @@ API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false \
 never include raw stdout content in your response:
 
 ```bash
+# macOS / Linux
 python3 << 'EOF'
 import json, re
 
@@ -862,8 +918,42 @@ else:
 EOF
 ```
 
+```powershell
+# Windows
+python3 -c "
+import json, re, os
+raw = open(os.path.join(os.environ['TEMP'], '42c-scan-out.json')).read()
+match = re.search(r'\{[\s\S]*\}', raw)
+if not match:
+    print('No JSON found in scan output')
+    exit(0)
+data = json.loads(match.group())
+sqg = 'PASSED' if data.get('sqgPass') else ('FAILED' if 'sqgPass' in data else 'N/A')
+print(f'sqgPass: {sqg}')
+for d in data.get('sqgDetails', []):
+    rules = d.get('blockingRules', [])
+    if rules:
+        print(f'blockingRules[{len(rules)}]: {chr(44).join(rules)}')
+results = data.get('results', data.get('scanResults', []))
+if isinstance(results, dict):
+    results = [results]
+failures = [
+    (r.get('operationId', r.get('path', '?')), t.get('testKey', '?'), t.get('severity', ''))
+    for r in results
+    for t in r.get('testResults', [])
+    if t.get('status') == 'fail'
+]
+if failures:
+    print(f'\nfailures[{len(failures)}]{{operation,test,severity}}:')
+    for op, test, sev in failures:
+        print(f'  {op},{test},{sev}')
+else:
+    print('failures: none')
+"
+```
+
 Use only the TOON output above when rendering Step 7. Do not load or display
-the raw `/tmp/42c-scan-out.json` content.
+the raw scan output file content.
 
 **Freemium mode**: `sqgPass` will be absent or `true`. Present all findings
 informally — no quality gate is enforced. Note to the user:
