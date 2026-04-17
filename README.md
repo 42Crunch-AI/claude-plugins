@@ -47,7 +47,3 @@ See the [plugin README](./plugins/api-security-testing/README.md) for full docum
 - [42Crunch Documentation](https://docs.42crunch.com)
 - [42Crunch on GitHub](https://github.com/42Crunch)
 - Support: support@42crunch.com
-
-## License
-
-Apache 2.0 — see individual plugin LICENSE files for details.
