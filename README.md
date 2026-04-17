@@ -1,6 +1,6 @@
 # 42Crunch Claude Plugins
 
-The official 42Crunch plugin marketplace for Claude Code — a catalog of AI-powered plugins that bring 42Crunch's API security capabilities directly into your Claude Code workflow.
+The official [42Crunch](https://www.42crunch.com) plugin marketplace for Claude Code — a catalog of AI-powered plugins that bring 42Crunch's API security capabilities directly into your Claude Code workflow.
 
 42Crunch plugins give Claude the ability to audit OpenAPI specs, scan live APIs for vulnerabilities, and apply fixes to ensure APIs meet security guardrails.
 
