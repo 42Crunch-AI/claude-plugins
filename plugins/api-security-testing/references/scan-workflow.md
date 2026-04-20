@@ -827,6 +827,22 @@ variable. Exclude it from all future happy-path re-runs and announce it in the f
 
 Repeat until all **non-skipped** happy paths pass.
 
+### Database Reset Reminder (After Happy Path)
+
+The happy path scenarios have now executed against your live API and may have
+created, modified, or deleted records in your database. Before the full scan
+runs, the database should be restored to a clean state so that conformance
+fuzzing and authorization tests start from known data.
+
+Call `AskUserQuestion`:
+- **question**: `"The happy path scenarios have finished running and may have modified your database (created, updated, or deleted records). Please reset your database to a clean state before the full scan starts. Have you reset the database?"`
+- **options**: `["Yes — database is reset, ready to proceed", "No — continue without resetting (results may be affected)"]`
+
+Proceed regardless of the answer. If the user selects **No**, surface a one-line
+warning before continuing:
+> ⚠️ Proceeding without a database reset — scan results may be affected by
+> residual state from happy path runs.
+
 ### Restore runtime flags
 
 Once all happy paths pass, set `happyPathOnly: false` before the full scan:
@@ -954,6 +970,25 @@ else:
 
 Use only the TOON output above when rendering Step 7. Do not load or display
 the raw scan output file content.
+
+## Step 6.5 — Database Reset Reminder (After Full Scan)
+
+The full scan (conformance fuzzing and authorization tests) has now completed.
+It may have made malformed requests, cross-user resource accesses (BOLA/BFLA),
+and repeated operations that further mutated your database state.
+
+Call `AskUserQuestion`:
+- **question**: `"The full security scan has finished. Conformance fuzzing and authorization tests (BOLA/BFLA) may have further modified your database. Would you like to reset your database before reviewing results and applying fixes?"`
+- **options**: `["Yes — I'll reset the database now", "No — continue to results"]`
+
+If the user selects **Yes**: display the message `"Please reset your database
+and confirm when ready."`, then call a second `AskUserQuestion`:
+- **question**: `"Database reset complete?"`
+- **options**: `["Yes — ready to review results"]`
+
+Then proceed to Step 7.
+
+---
 
 **Freemium mode**: `sqgPass` will be absent or `true`. Present all findings
 informally — no quality gate is enforced. Note to the user:
