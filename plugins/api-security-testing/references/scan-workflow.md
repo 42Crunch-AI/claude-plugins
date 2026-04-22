@@ -9,9 +9,28 @@
 
 ## Step 1 — Locate or Create Scan Config
 
-### 1a — Resolve alias
+### 1a — Resolve git root and alias
 
-Walk upward from the OAS file directory looking for `.42c/conf.yaml`.
+**Resolve the git root first.** Run from the OAS file's directory — not from the
+agent's working directory, which may be a parent folder that is not itself a
+git repository:
+
+```bash
+git -C "<oas-file-directory>" rev-parse --show-toplevel 2>/dev/null || echo "NOT_GIT"
+```
+
+- **Git root found** → store as `GIT_ROOT`. All relative paths (OAS path in
+  `conf.yaml`, `--conf-file`, `scan run` / `scan conf validate` arguments) are
+  relative to this directory. All `42c-ast` commands must be run from `GIT_ROOT`
+  (use `cd "$GIT_ROOT" &&` or equivalent).
+- **NOT_GIT** → use the OAS file's directory as the project root and note to
+  the user that there is no git repository.
+
+**Do not** call `git rev-parse` from the agent's working directory — it may be a
+parent of the actual repo and will return NOT_GIT even when a git repo exists
+deeper in the tree.
+
+Walk upward from `GIT_ROOT` looking for `.42c/conf.yaml`.
 
 **If `.42c/conf.yaml` exists and the OAS path is listed:**
 - Extract the `alias` value for that path.
@@ -20,7 +39,7 @@ Walk upward from the OAS file directory looking for `.42c/conf.yaml`.
 - Derive an alias from the OAS filename: lowercase the stem, replace spaces/underscores with hyphens.
   - Example: `openAPI.json` → `openapi`, `my_banking_api.json` → `my-banking-api`
   - Or use `info.title` from the OAS file slug if more descriptive.
-- Add (or create) the entry in `.42c/conf.yaml`:
+- Add (or create) the entry in `$GIT_ROOT/.42c/conf.yaml`:
   ```yaml
   apis:
     <relative-oas-path-from-git-root>:
@@ -328,7 +347,7 @@ satisfied from:
 - OAS `example` / `examples` / `default` values on the schema
 - Static literal values
 - Environment variables (e.g. `{{username}}`, `{{password}}`)
-- The `$randomuint` / `$randomstring` macros for uniqueness
+- The `{{$randomuint}}` / `{{$randomstring}}` macros for uniqueness
 
 **B — Dependency-chain required**
 One or more path or query params contain a dynamic ID that can only come from
@@ -363,17 +382,16 @@ start. Overriding the variable at step level does not change which cached
 credential is injected; the operation will still run as User1.
 
 Instead:
-1. Add a named throwaway credential to `authenticationDetails` with a
-   register + login acquisition chain.
+1. Add a named throwaway credential to `authenticationDetails` with only
+   the login acquisition step.
 2. Set `"auth": ["AccessToken/<throwaway-credential-name>"]` **directly on
    the operation's `request` definition** — using `Scheme/CredentialName`
    notation. Do not use the default credential.
-3. Build a 2-step `happy.path` scenario:
-   - Step 1: run the destructive operation (it authenticates as the throwaway
+3. Build a `happy.path` scenario with a `before` block:
+   - Before block: register the throwaway user (with environment overrides for
+     the throwaway credentials) by adding the register step to the operation's `before` block.
+   - Happy Path: run the destructive operation (it authenticates as the throwaway
      via the operation's `auth` setting).
-   - Step 2: re-register the throwaway user (with environment overrides for
-     the throwaway credentials) so subsequent fuzzing iterations can
-     authenticate again.
 
 This leaves User1 intact while still validating the operation across
 multiple fuzzing iterations.
@@ -479,30 +497,38 @@ block. If the operation is not in the table, ask the user to paste the values.
 
 For operations that delete the primary user's own account, the throwaway
 credential must be fully defined in `authenticationDetails` and the operation
-must reference it directly. The scenario then re-creates the throwaway after
-deletion so subsequent fuzzing iterations can still authenticate.
+must reference it directly. The operation's `before` block registers the
+throwaway user before each iteration, so the scenario only needs to delete it.
 
-**Step A — Add the throwaway credential to `authenticationDetails`**
+**Step A — Add the register step to the operation's `before` block**
 
-Inside the `AccessToken` credentials map, add a named throwaway entry with a
-register + login acquisition chain. The register step should accept both 201
+Add the register operation to the `before` block of the Class-D operation so
+the throwaway user exists before each scenario iteration. Accept both 201
 (created) and 409 (already exists — idempotent):
+
+```json
+"before": [
+  {
+    "$ref": "#/operations/<RegisterOperationId>/request",
+    "environment": {
+      "<emailVar>": "<throwaway@example.com>",
+      "<credentialVar>": "<throwawayCredential>"
+    },
+    "responses": {
+      "201": { "expectations": { "httpStatus": 201 } },
+      "409": { "expectations": { "httpStatus": 409 } }
+    }
+  }
+]
+```
+
+Then, inside the `AccessToken` credentials map, add a named throwaway entry
+with only the login acquisition step:
 
 ```json
 "<throwaway-credential-name>": {
   "credential": "{{AccessToken}}",
   "requests": [
-    {
-      "$ref": "#/operations/<RegisterOperationId>/request",
-      "environment": {
-        "<emailVar>": "<throwaway@example.com>",
-        "<credentialVar>": "<throwawayCredential>"
-      },
-      "responses": {
-        "201": { "expectations": { "httpStatus": 201 } },
-        "409": { "expectations": { "httpStatus": 409 } }
-      }
-    },
     {
       "$ref": "#/operations/<LoginOperationId>/request",
       "environment": {
@@ -542,7 +568,11 @@ block — not as a scenario-step override:
 }
 ```
 
-**Step C — Build a 2-step scenario: delete, then re-register**
+**Step C — Build a 1-step scenario: delete only**
+
+The throwaway user is already registered in the operation's `before` block
+(Step A), which runs before every scenario iteration. There is no need to
+re-register after deletion — the `before` block handles that automatically.
 
 ```json
 "scenarios": [
@@ -553,26 +583,16 @@ block — not as a scenario-step override:
       {
         "fuzzing": true,
         "$ref": "#/operations/<DeleteSelfOperationId>/request"
-      },
-      {
-        "$ref": "#/operations/<RegisterOperationId>/request",
-        "environment": {
-          "<emailVar>": "<throwaway@example.com>",
-          "<credentialVar>": "<throwawayCredential>"
-        },
-        "responses": {
-          "201": { "expectations": { "httpStatus": 201 } }
-        }
       }
     ]
   }
 ]
 ```
 
-Step 1 deletes the throwaway (the operation's `auth` ensures only the throwaway
-credential is used — User1 is never touched). Step 2 immediately re-registers
-the throwaway so the next fuzzing iteration can acquire a fresh token via the
-`authenticationDetails` chain.
+The operation's `auth` field ensures only the throwaway credential is used —
+User1 is never touched. Before each subsequent iteration, the operation's
+`before` block re-registers the throwaway user so the `authenticationDetails`
+login step can always acquire a fresh token.
 
 **Step D — Add a utility request for idempotent pre-cleanup (optional)**
 
@@ -1385,8 +1405,9 @@ needing a throwaway user.
 #### Class-D — throwaway user (self-destructive delete)
 
 The operation's `auth` field pins the throwaway credential directly.
-The `happy.path` scenario is a 2-step chain: delete → re-register.
-No `before` block on this operation is needed.
+The `happy.path` scenario is a single delete step. The `before` block on the
+operation re-registers the throwaway user before each iteration so the
+`authenticationDetails` login step can always acquire a fresh token.
 
 ```json
 "<DeleteSelfOperationId>": {
@@ -1405,6 +1426,19 @@ No `before` block on this operation is needed.
     "defaultResponse": "<success-status>",
     "responses": { ... }
   },
+  "before": [
+    {
+      "$ref": "#/operations/<RegisterOperationId>/request",
+      "environment": {
+        "<emailVar>": "<throwaway@example.com>",
+        "<credentialVar>": "<throwaway-value>"
+      },
+      "responses": {
+        "201": { "expectations": { "httpStatus": 201 } },
+        "409": { "expectations": { "httpStatus": 409 } }
+      }
+    }
+  ],
   "scenarios": [
     {
       "key": "happy.path", "fuzzing": true,
@@ -1412,16 +1446,6 @@ No `before` block on this operation is needed.
         {
           "fuzzing": true,
           "$ref": "#/operations/<DeleteSelfOperationId>/request"
-        },
-        {
-          "$ref": "#/operations/<RegisterOperationId>/request",
-          "environment": {
-            "<emailVar>": "<throwaway@example.com>",
-            "<credentialVar>": "<throwaway-value>"
-          },
-          "responses": {
-            "201": { "expectations": { "httpStatus": 201 } }
-          }
         }
       ]
     }
@@ -1429,9 +1453,10 @@ No `before` block on this operation is needed.
 }
 ```
 
-Step 1 deletes the throwaway user (enforced by `auth` on the operation — User1
-is never used). Step 2 immediately re-creates the throwaway so subsequent
-fuzzing iterations can re-authenticate via the `authenticationDetails` chain.
+The `auth` field ensures only the throwaway credential is used — User1 is never
+touched. The operation's `before` block re-registers the throwaway before each
+iteration so the `authenticationDetails` login flow can always acquire a fresh
+token.
 
 ---
 
@@ -1490,17 +1515,6 @@ fuzzing iterations can re-authenticate via the `authenticationDetails` chain.
           "credential": "{{AccessToken}}",
           "requests": [
             {
-              "$ref": "#/operations/<RegisterOperationId>/request",
-              "environment": {
-                "<emailVar>": "<throwaway@example.com>",
-                "<credentialVar>": "<throwaway-value>"
-              },
-              "responses": {
-                "201": { "expectations": { "httpStatus": 201 } },
-                "409": { "expectations": { "httpStatus": 409 } }
-              }
-            },
-            {
               "$ref": "#/operations/<LoginOperationId>/request",
               "environment": {
                 "<emailVar>": "<throwaway@example.com>",
@@ -1527,7 +1541,7 @@ fuzzing iterations can re-authenticate via the `authenticationDetails` chain.
 ```
 
 - `User2Token` uses `environment` to override credential vars for the login step — no need to duplicate the login operation.
-- `<throwaway-credential-name>` acquires its token via register + login at session start. The register step accepts both 201 and 409 so the acquisition is idempotent. The operation that uses this credential sets `"auth": ["AccessToken/<throwaway-credential-name>"]` directly on its `request` definition — not as a scenario-step override.
+- `<throwaway-credential-name>` acquires its token via the login step at session start. The register step is placed in the operation's `before` block so the throwaway user exists before each scenario iteration; it accepts both 201 and 409 for idempotency. The operation that uses this credential sets `"auth": ["AccessToken/<throwaway-credential-name>"]` directly on its `request` definition — not as a scenario-step override.
 
 ---
 
@@ -1580,5 +1594,5 @@ Use for reusable calls (e.g. cleanup deletes) referenced in `before` blocks that
 | Never use `"skipped": true` on Class-D operations | The scanner ignores it and deletes the primary user, breaking subsequent tests |
 | Never override the token variable via `environment` to swap credentials on a Class-D operation | `authenticationDetails` tokens are cached at session start; environment overrides do not change which cached token is injected |
 | Class-D operations: set `"auth": ["AccessToken/<throwaway>"]` on the operation definition, not as a scenario-step override | The credential must be pinned at the operation level so the scanner uses the throwaway for ALL execution paths — happy path, fuzzing, and authorization tests |
-| Class-D scenarios: re-register the throwaway as the final step | Ensures subsequent fuzzing iterations can re-authenticate; without this, the throwaway is permanently deleted after the first iteration |
+| Class-D scenarios: delete only — do NOT re-register in the scenario | The operation's `before` block already re-registers the throwaway before each iteration; adding a re-register step in the scenario is redundant and incorrect |
 | Non-self-destructive deletes: use `after` block to recreate the resource | Keeps the test environment consistent across fuzzing iterations without a throwaway user |
