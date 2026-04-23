@@ -11,9 +11,7 @@
 
 ### 1a — Resolve git root and alias
 
-**Resolve the git root first.** Run from the OAS file's directory — not from the
-agent's working directory, which may be a parent folder that is not itself a
-git repository:
+**Resolve the git root first.** Run from the OAS file's directory:
 
 ```bash
 git -C "<oas-file-directory>" rev-parse --show-toplevel 2>/dev/null || echo "NOT_GIT"
@@ -23,12 +21,8 @@ git -C "<oas-file-directory>" rev-parse --show-toplevel 2>/dev/null || echo "NOT
   `conf.yaml`, `--conf-file`, `scan run` / `scan conf validate` arguments) are
   relative to this directory. All `42c-ast` commands must be run from `GIT_ROOT`
   (use `cd "$GIT_ROOT" &&` or equivalent).
-- **NOT_GIT** → use the OAS file's directory as the project root and note to
+- **NOT_GIT** → use the agent's working directory as the project root and note to
   the user that there is no git repository.
-
-**Do not** call `git rev-parse` from the agent's working directory — it may be a
-parent of the actual repo and will return NOT_GIT even when a git repo exists
-deeper in the tree.
 
 Walk upward from `GIT_ROOT` looking for `.42c/conf.yaml`.
 
@@ -402,7 +396,7 @@ multiple fuzzing iterations.
 Operation              | Class  | BOLA? | Proposed data source
 -----------------------|--------|-------|----------------------------------------------
 UserLogin              | A      | no    | env vars: {{username}} / {{password}}
-UserRegistration       | A      | no    | $randomuint macro for username/email
+UserRegistration       | A      | no    | {{$randomuint}} macro for username/email
 CreateResource         | A      | no    | OAS body example + {{userId}} from auth
 CancelResource         | B      | yes   | CreateResource → /{resourceId}
 RetrieveResource       | B      | yes   | CreateResource → /{resourceId}
@@ -621,95 +615,73 @@ Then in the register operation's `before` block: login as the throwaway → call
 `<DeleteThrowawayUtil>` → the register step in the happy path always finds a
 clean slate.
 
-### BOLA test scenario pattern (BOLA? = yes operations)
+### BOLA authorization test pattern (BOLA? = yes operations)
 
-For every operation marked `BOLA? = yes` in the Step 3 table, add a second
-scenario entry alongside its `happy.path` scenario. The mechanism is identical
-to Class-D: override the primary token variable via `environment` — but swap
-in `{{user2Token}}` instead of a throwaway token.
+For every operation marked `BOLA? = yes` in the Step 3 table, register it
+with the top-level `authorizationTests` entry. The scanner replaces the
+source credential with the target credential on an otherwise identical
+execution of the operation's happy path — including any `before` blocks
+already defined on that operation, so valid resource IDs are always in scope.
 
-**Class-B BOLA candidate** (needs a creator step to obtain a valid resource ID):
+**Step 1 — Define the authorization test (once, top-level):**
 
 ```json
-{
-  "key": "bola.test",
-  "requests": [
-    {
-      "$ref": "#/operations/<CreatorOperationId>/request",
-      "responses": {
-        "<successCode>": {
-          "expectations": { "httpStatus": <successCode> },
-          "variableAssignments": {
-            "<varName>": {
-              "in": "body", "from": "response", "contentType": "json",
-              "path": { "type": "jsonPointer", "value": "/<fieldName>" }
-            }
-          }
-        }
-      }
-    },
-    {
-      "$ref": "#/operations/<TargetOperationId>/request",
-      "environment": { "<primaryTokenVar>": "{{user2Token}}" },
-      "responses": {
-        "403": { "expectations": { "httpStatus": 403 } },
-        "401": { "expectations": { "httpStatus": 401 } }
-      }
-    }
-  ]
+"authorizationTests": {
+  "<BolaTestName>": {
+    "key": "authentication-swapping-bola",
+    "source": ["<SchemeName>/User1Token"],
+    "target": ["<SchemeName>/User2Token"]
+  }
 }
 ```
 
-**Class-A BOLA candidate** (resource ID comes from static env vars — no
-creator step needed):
+**Step 2 — Tag each BOLA candidate operation:**
 
 ```json
-{
-  "key": "bola.test",
-  "requests": [
-    {
-      "$ref": "#/operations/<TargetOperationId>/request",
-      "environment": { "<primaryTokenVar>": "{{user2Token}}" },
-      "responses": {
-        "403": { "expectations": { "httpStatus": 403 } },
-        "401": { "expectations": { "httpStatus": 401 } }
-      }
-    }
-  ]
+"<TargetOperationId>": {
+  "operationId": "<TargetOperationId>",
+  "authorizationTests": ["<BolaTestName>"],
+  ...
 }
 ```
 
-`<primaryTokenVar>` is the template variable name used for the bearer token
-in the target operation's request (e.g. `user1Token`, `accessToken`). The
-`environment` override applies only to this scenario step, leaving all other
-scenarios unaffected.
+No additional scenario block is needed. The scanner runs the BOLA test by
+replaying the operation's `happy.path` scenario using User 2's token.
 
-A 2xx response on the `bola.test` scenario is a confirmed BOLA finding. A 401
-or 403 means the server enforces ownership — not a finding.
+A 2xx response on the BOLA authorization test is a confirmed BOLA finding.
+A 401 or 403 means the server enforces ownership — not a finding.
 
-### BFLA test scenario pattern (BFLA candidates)
+### BFLA authorization test pattern (BFLA candidates)
 
 For every operation flagged as a BFLA candidate (privileged / admin-only),
-add a BFLA test scenario that attempts the operation with User 1's
-low-privilege token in place of the admin token.
+register it with a BFLA entry in `authorizationTests`. The scanner replaces
+the admin credential with the low-privilege credential on an otherwise
+identical execution of the operation's happy path.
+
+**Step 1 — Define the authorization test (once, top-level):**
 
 ```json
-{
-  "key": "bfla.test",
-  "requests": [
-    {
-      "$ref": "#/operations/<PrivilegedOperationId>/request",
-      "environment": { "<adminTokenVar>": "{{user1Token}}" },
-      "responses": {
-        "403": { "expectations": { "httpStatus": 403 } },
-        "401": { "expectations": { "httpStatus": 401 } }
-      }
-    }
-  ]
+"authorizationTests": {
+  "<BflaTestName>": {
+    "key": "authentication-swapping-bfla",
+    "source": ["<SchemeName>/AdminToken"],
+    "target": ["<SchemeName>/User1Token"]
+  }
 }
 ```
 
-A 2xx response on the `bfla.test` scenario is a confirmed BFLA finding.
+**Step 2 — Tag each BFLA candidate operation:**
+
+```json
+"<PrivilegedOperationId>": {
+  "operationId": "<PrivilegedOperationId>",
+  "authorizationTests": ["<BflaTestName>"],
+  ...
+}
+```
+
+No additional scenario block is needed. A 2xx response on the BFLA
+authorization test is a confirmed BFLA finding.
 
 ---
 
@@ -1545,7 +1517,7 @@ token.
 
 ---
 
-### `authorizationTests` — BOLA
+### `authorizationTests` — BOLA and BFLA
 
 ```json
 "authorizationTests": {
@@ -1553,6 +1525,11 @@ token.
     "key": "authentication-swapping-bola",
     "source": ["AccessToken/User1Token"],
     "target": ["AccessToken/User2Token"]
+  },
+  "<BflaTestName>": {
+    "key": "authentication-swapping-bfla",
+    "source": ["AccessToken/AdminToken"],
+    "target": ["AccessToken/User1Token"]
   }
 }
 ```
@@ -1561,7 +1538,10 @@ token.
 
 ### `requests` — named utility request
 
-Use for reusable calls (e.g. cleanup deletes) referenced in `before` blocks that are not OAS operations:
+Use for reusable calls that are not OAS operations. Referenced in `before` blocks or `authenticationDetails`. Common use cases:
+
+- **Utility / cleanup requests** — e.g. a DELETE to remove a throwaway user before re-registering, where no matching OAS operation exists.
+- **OAuth token endpoints** — e.g. `POST /oauth/token` or an external authorization server endpoint that issues access tokens but is not part of the API's own OAS file. Define it here and reference it via `$ref` in `authenticationDetails[*].credentials.<name>.requests` so the scanner can acquire tokens without an inline request block.
 
 ```json
 "requests": {
@@ -1571,7 +1551,8 @@ Use for reusable calls (e.g. cleanup deletes) referenced in `before` blocks that
       "details": {
         "method": "<METHOD>",
         "url": "{{host}}<path>",
-        "headers": [{ "key": "Authorization", "value": "Bearer {{AccessToken}}" }]
+        "headers": [{ "key": "Authorization", "value": "Bearer {{AccessToken}}" }],
+        "requestBody": { "mode": "urlencoded", "urlencoded": { "<key>": { "value": "{{<value>}}" } } }
       }
     },
     "defaultResponse": "<success-status>",
@@ -1581,6 +1562,48 @@ Use for reusable calls (e.g. cleanup deletes) referenced in `before` blocks that
   }
 }
 ```
+
+#### Referencing a `requests` entry from `authenticationDetails`
+
+When the token endpoint is defined in `requests` (e.g. an OAuth server not in the OAS), reference it with `"$ref": "#/requests/<RequestName>"` inside the credential's `requests` array. Use `environment` to inject per-credential variables:
+
+```json
+"authenticationDetails": [
+  {
+    "<SchemeName>": {
+      "type": "bearer",
+      "default": "User1Token",
+      "credentials": {
+        "User1Token": {
+          "credential": "{{AccessToken}}",
+          "requests": [
+            {
+              "$ref": "#/requests/<TokenRequestName>",
+              "environment": {
+                "<usernameVar>": "{{<user1UsernameVar>}}",
+                "<passwordVar>": "{{<user1PasswordVar>}}"
+              },
+              "responses": {
+                "200": {
+                  "expectations": { "httpStatus": 200 },
+                  "variableAssignments": {
+                    "AccessToken": {
+                      "from": "response", "in": "body", "contentType": "json",
+                      "path": { "type": "jsonPointer", "value": "/<tokenField>" }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+]
+```
+
+The key difference from an OAS-operation reference (`"$ref": "#/operations/<OperationId>/request"`) is the path prefix: `#/requests/<RequestName>` targets the top-level `requests` map, while `#/operations/<OperationId>/request` targets the `operations` map. Both support `environment` overrides and `variableAssignments` on responses.
 
 ---
 
