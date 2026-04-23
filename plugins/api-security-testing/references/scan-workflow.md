@@ -1430,6 +1430,8 @@ touched. The operation's `before` block re-registers the throwaway before each
 iteration so the `authenticationDetails` login flow can always acquire a fresh
 token.
 
+To add a BOLA authorization test, append `"authorizationTests": ["<BolaTestName>"]` at the operation level.
+
 ---
 
 ### `authenticationDetails` — bearer token
