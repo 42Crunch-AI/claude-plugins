@@ -94,6 +94,35 @@ Write `SCAN_TARGET_URL` (confirmed in the skill's URL resolution step) into
 user prompting is needed here — the URL was already confirmed and reachability
 checked before the workflow started.
 
+Important schema rule for `environments.default.variables`:
+- Variable entries must be objects with a source strategy, not raw string literals.
+- Use this shape for scan variables:
+  ```json
+  "host": {
+    "name": "SCAN42C_HOST",
+    "from": "environment",
+    "required": false,
+    "default": "<SCAN_TARGET_URL>"
+  }
+  ```
+
+After writing `SCAN_TARGET_URL` (and after any direct edits to `CONF_FILE`),
+run an immediate config validation checkpoint before proceeding.
+
+```bash
+# Platform mode
+API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf validate <relative-oas-path> \
+  --conf-file <CONF_FILE>
+
+# Freemium mode
+<binary> scan conf validate <relative-oas-path> \
+  --freemium-host stateless.42crunch.com:443 \
+  --token <FREEMIUM_TOKEN> \
+  --conf-file <CONF_FILE>
+```
+
+If validation fails, stop and fix the config before Step 2.
+
 ---
 
 ## Step 2 — Authentication Setup
@@ -682,6 +711,30 @@ identical execution of the operation's happy path.
 
 No additional scenario block is needed. A 2xx response on the BFLA
 authorization test is a confirmed BFLA finding.
+
+## Step 4.5 — Scan Config Validation Checkpoint
+
+After all Step 2 to Step 4 edits are complete (credentials, operation
+classification, scenario chains, and authorization test wiring), validate
+`CONF_FILE` again before running happy-path validation.
+
+```bash
+# Platform mode
+API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf validate <relative-oas-path> \
+  --conf-file <CONF_FILE>
+
+# Freemium mode
+<binary> scan conf validate <relative-oas-path> \
+  --freemium-host stateless.42crunch.com:443 \
+  --token <FREEMIUM_TOKEN> \
+  --conf-file <CONF_FILE>
+```
+
+Validation result handling:
+- `statusCode: 0` → continue to Step 5.
+- Any non-zero status or schema errors (for example `unknown env from` paths)
+  → fix config shape and re-run this checkpoint.
+- Do not run Step 5 until this checkpoint passes.
 
 ---
 

@@ -113,6 +113,11 @@ explicit user permission before execution.
    rules and authorization failures — not severity alone. The skill pauses and
    asks the user to consent before applying any OAS changes.
 
+  **Mandatory checkpoint:** during Phase 2, after any direct edit to
+  `CONF_FILE` (including `environments.default.variables.*`, auth wiring, or
+  scenario chains), run `scan conf validate` and resolve all validation
+  errors before continuing to happy-path or full scan runs.
+
 8. **Present the final combined summary** (see Output Format below).
 
 9. **Recommend next steps** based on the outcome:

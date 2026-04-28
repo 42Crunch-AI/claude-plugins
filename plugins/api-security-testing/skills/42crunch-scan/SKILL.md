@@ -104,6 +104,11 @@ running `42crunch-audit` first.
    (Authorization failures / SQG-blocking conformance / informational conformance)
    and pauses for consent before applying any OAS changes.
 
+  **Mandatory checkpoint:** after any direct edit to `CONF_FILE` (including
+  `environments.default.variables.*`, auth wiring, or scenario chains), run
+  `scan conf validate` and resolve all validation errors before continuing to
+  happy-path or full scan runs.
+
    **Freemium mode**: no SQG is enforced for scan. Present all findings for
    information. The user decides which (if any) to fix.
 
