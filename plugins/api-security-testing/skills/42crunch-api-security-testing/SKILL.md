@@ -98,7 +98,7 @@ explicit user permission before execution.
        OAS:      <filename>  (<N> operations)
        Auth:     <scheme types>  [+  second user needed — <N> BOLA candidate(s)]
        Samples:  OAS has sample data  /  No samples — you'll need to provide test data
-       Tag:      <category>:<tagname>           ← platform mode only
+       Tag:      <category>:<tagname>           ← platform mode only, when a tag is assigned; omit if no tag
        Mode:     Platform / Freemium
      ```
      `"I'm ready to start configuring the scan. I'll ask for credentials, classify your operations, and set up test scenarios — then run a happy path validation before the full scan. Shall I proceed?"`
@@ -149,17 +149,17 @@ Phase 1 — Audit Complete
   Score:          <score> / 100  (Security: <sec-score> · Data Validation: <data-score>)
   Score change:   <initial-score> → <score>  (<delta>)  |  Data: <initial-data> → <data-score>  (<data-delta>)   ← omit if no fixes applied
   Mode:           Platform                          ← or "Freemium"
-  SQG:            PASSED  (Security-Guardrails — your org's security quality gate is met)     ← platform, passed
-  SQG:            FAILED  (Security-Guardrails — the quality gate is not met; fixes above are required)    ← platform, failed
+  SQG:            PASSED  (<sqg-name> — your org's security quality gate is met)     ← platform mode, passed
+  SQG:            FAILED  (<sqg-name> — the quality gate is not met; fixes above are required)    ← platform mode, failed
   SQG:            N/A  (Freemium — no automated gate; user-defined thresholds applied this session)    ← freemium mode
-  Tag:            <category>:<tagname>              ← platform mode only
+  Tag:            <category>:<tagname>              ← platform mode only, when a tag is assigned; omit this row if no tag
   Issues fixed:   2 SQG-blocking  (0 security · 2 data validation)
   OAS updated:    <path/to/openapi.json>
 
 Phase 2 — Scan Complete
   Mode:           Platform                          ← or "Freemium"
-  SQG:            PASSED  (Security-Guardrails — your org's security quality gate is met)    ← platform, passed
-  SQG:            FAILED  (Security-Guardrails — the quality gate is not met; fixes above are required)    ← platform, failed
+  SQG:            PASSED  (<sqg-name> — your org's security quality gate is met)    ← platform mode, passed
+  SQG:            FAILED  (<sqg-name> — the quality gate is not met; fixes above are required)    ← platform mode, failed
   SQG:            N/A  (Freemium — scan findings are informational; no gate enforced)    ← freemium mode
   Authorization:  BOLA confirmed on 1 operation — OAS updated · server-side fix applied
   Conformance:    1 SQG-blocking issue fixed (OAS + code) · 3 informational findings surfaced

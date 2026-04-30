@@ -9,8 +9,8 @@
 
 ## Step 1 — Locate or Create Scan Config
 
-> **Freemium mode**: omit `--tag` and `--report-sqg` from all commands in this
-> step. These flags require platform access and must not be used in freemium mode.
+> **Freemium mode**: omit `--tag` from all commands in this step. This flag
+> requires platform access and must not be used in freemium mode.
 
 ### 1a — Resolve git root and alias
 

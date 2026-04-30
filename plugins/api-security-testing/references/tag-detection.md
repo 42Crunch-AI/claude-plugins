@@ -39,7 +39,8 @@ Call `AskUserQuestion`:
   - `"Proceed without a tag"` — continue without tag flags
 
 **If "Proceed without a tag"**: return to the calling workflow and continue
-without `--tag` or `--report-sqg`. No further steps in this document.
+without `--tag`. `--report-sqg` is still passed — the platform will apply
+the organisation's default SQG. No further steps in this document.
 
 **If "Assign a tag"**: proceed to Step 3.
 

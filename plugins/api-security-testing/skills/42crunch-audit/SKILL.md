@@ -68,11 +68,11 @@ After the audit completes, produce a summary in this shape:
 Audit Complete
   Score:          <score> / 100  (Security: <sec-score> · Data Validation: <data-score>)
   Score change:   <initial-score> → <score>  (<delta>)  |  Data: <initial-data> → <data-score>  (<data-delta>)   ← omit if no fixes applied
-  SQG:            PASSED  (Security-Guardrails — your org's security quality gate is met)    ← platform mode, passed
-  SQG:            FAILED  (Security-Guardrails — the quality gate is not met; fixes above are required)    ← platform mode, failed
+  SQG:            PASSED  (<sqg-name> — your org's security quality gate is met)    ← platform mode, passed
+  SQG:            FAILED  (<sqg-name> — the quality gate is not met; fixes above are required)    ← platform mode, failed
   SQG:            N/A  (Freemium — no automated gate; user-defined thresholds applied this session)    ← freemium mode
   Mode:           Platform / Freemium
-  Tag:            <category>:<tagname>             ← platform mode only
+  Tag:            <category>:<tagname>             ← platform mode only, when a tag is assigned; omit this row if no tag
   Issues fixed:   2 SQG-blocking  (0 security · 2 data validation)
   OAS updated:    <path/to/openapi.json>
 ```

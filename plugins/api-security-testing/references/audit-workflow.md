@@ -35,7 +35,7 @@ API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
   --output "$OUTPUT_DIR/report.json" \
   --output-format json \
   --report-sqg \
-  --tag <category>:<tagname> \
+  [--tag <category>:<tagname>] \   # include only when a tag is assigned
   <path-to-oas-file>
 ```
 
@@ -57,7 +57,7 @@ API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
 |---------------|----------------------------------------------------------------------------------------------------|
 | `report.json` | Audit results                                                                                      |
 | `todo.json`   | Same as report.json but with `index[]` for OAS path resolution — **prefer this file**              |
-| `sqg.json`    | SQG result — only written in platform mode (API_KEY/IDE_TOKEN + PLATFORM_HOST + tag all present). Not written in freemium mode. |
+| `sqg.json`    | SQG result — written in platform mode whenever `--report-sqg` is passed (with or without `--tag`). Not written in freemium mode. |
 
 ---
 
@@ -75,7 +75,7 @@ rule IDs — translate each one using the table in `./audit-rule-translations.md
 
 ### Score headline
 
-**Platform mode:**
+**Platform mode** (`sqg.json` always present):
 ```
 Audit Score: <score> / 100  |  Security: <sec-score>/100  |  Data Validation: <data-score>/100
 SQG (<sqg-name>): PASSED / FAILED

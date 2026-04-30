@@ -69,7 +69,8 @@ to the calling skill.
 | `FREEMIUM_TOKEN`  | Freemium  | Base64 token, passed as `--token`         |
 
 **Platform mode**: `API_KEY` and `PLATFORM_HOST` set for every command.
-`--tag` and `--report-sqg` applied when a tag is resolved.
+`--report-sqg` always applied. `--tag <category>:<tagname>` applied only
+when a tag is assigned.
 
 **Freemium mode**: `--freemium-host stateless.42crunch.com:443` and
 `--token <FREEMIUM_TOKEN>` for every command. No `--tag` or `--report-sqg`.
