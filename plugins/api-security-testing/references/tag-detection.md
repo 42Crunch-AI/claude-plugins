@@ -93,25 +93,30 @@ Parse the file if it exists and extract the tag string in `<category>:<tagname>`
 
 > "This API is tagged on the 42Crunch platform as **`<category>:<tagname>`**.
 > The audit will run against this tag, which means platform SQGs,
-> customisations, and data dictionaries associated with it will be applied
+> customizations, and data dictionaries associated with it will be applied
 > automatically."
 
 Set the following audit flags: `--tag <category>:<tagname>`, `--report-sqg`.
 
 ### Tag not found
 
-> "This API doesn't have a 42Crunch platform tag yet, so the audit can't apply
-> your organisation's Security Quality Gates, data dictionaries, or
-> customisations.
+> "This API doesn't have a 42Crunch platform tag yet, so the audit won't apply
+> any custom Security Quality Gates, data dictionaries, or
+> customizations.
 >
-> Here's how to assign a tag in about 30 seconds:
-> 1. Open the 42Crunch extension panel in your IDE (the shield icon in the sidebar).
-> 2. Find this file in the API list — `<filename>`.
-> 3. Click **Assign Tag**, choose the category and tag that matches this API, and save.
+> Here's how to quickly assign a tag:
+> 1. Open your OpenAPI Specification file in your IDE.
+> 2. Click **Tags** in the top-left corner of the OAS file — `<filename>`.
+> 3. Select a category and tag from the drop-down menu.
 >
 > Once the tag is saved, run this skill again and it will pick up the tag
 > automatically. If you don't see any tags in the list, ask your 42Crunch
-> platform administrator to create one."
+> platform administrator to create one.
 
-**Stop.** Do not run any audit or scan commands. Do not fall back to running
-without a tag.
+`AskUserQuestion`: `"Would you like to proceed without a tag? The audit will run using
+                    your organization's default Security Quality Gate (SQG) and platform customizations."`
+— options: `["Yes — continue with defaults", "No — stop here"]`.
+
+If the user confirm Yes, run the audit and scan without `--tag`. This will default to
+the organizations default SGQ and Customization rules. If they decline, stop and do not run any
+audit or scan commands.
