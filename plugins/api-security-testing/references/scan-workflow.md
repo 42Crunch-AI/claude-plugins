@@ -9,6 +9,9 @@
 
 ## Step 1 — Locate or Create Scan Config
 
+> **Freemium mode**: omit `--tag` and `--report-sqg` from all commands in this
+> step. These flags require platform access and must not be used in freemium mode.
+
 ### 1a — Resolve git root and alias
 
 **Resolve the git root first.** Run from the OAS file's directory:

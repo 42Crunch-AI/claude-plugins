@@ -53,10 +53,10 @@ grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
 
 ## Step 4 — Tag Detection (platform mode only)
 
-Run silently. Read `./tag-detection.md`. In freemium mode, skip
-tag detection entirely. If a tag is found, announce it to the user before
-asking for permission. If no tag is found, stop as described in
-`./tag-detection.md`.
+Read `./tag-detection.md` and follow all steps. In freemium mode, skip
+tag detection entirely. The tag detection flow handles all outcomes — tag
+found, user assigns a tag, or user proceeds without one — before returning
+to the calling skill.
 
 ---
 

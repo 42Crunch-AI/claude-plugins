@@ -10,6 +10,9 @@
 
 ## Step 1 — Run the Audit
 
+> **Freemium mode**: omit `--tag` and `--report-sqg` from all commands in this
+> step. These flags require platform access and must not be used in freemium mode.
+
 Resolve a platform-appropriate output directory and create it if it does not exist:
 
 ```bash
