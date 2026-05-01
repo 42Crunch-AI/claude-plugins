@@ -20,9 +20,15 @@ Prepares the environment for 42Crunch audit and scan workflows in two phases:
 
 ## Entry Point
 
+> **Caller context**: This skill may be invoked directly by the user or as a
+> subroutine by another skill (e.g. `pre-flight`). Check whether a caller was
+> passed. Steps 1 and 6 behave differently depending on this context — see each
+> step for details.
+
 ### Step 1 — Introduce the setup
 
-Greet the user and explain what they'll be able to do once setup is complete:
+**If called directly by the user** (no caller context), greet the user and
+explain what they'll be able to do once setup is complete:
 
 > Welcome — let me get your 42Crunch environment ready. This is a one-time
 > setup that takes about two minutes. Once done, you'll be able to:
@@ -36,6 +42,8 @@ Greet the user and explain what they'll be able to do once setup is complete:
 > 2. Connect your 42Crunch credentials (existing platform account or free account).
 >
 > Let's go.
+
+**If called as a subroutine** (caller context is set), skip this greeting entirely and proceed directly to Step 2.
 
 ### Step 2 — Binary setup
 
@@ -86,6 +94,13 @@ it before continuing.
 Display the setup summary (see Output Format below).
 
 ### Step 6 — Recommend next steps
+
+**If called as a subroutine** (caller context is set), skip the next-steps
+prompt entirely. Announce `"Setup complete — continuing."` and return control
+to the caller. The caller (e.g. `pre-flight`) will resume from where it left
+off.
+
+**If called directly by the user** (no caller context), present the following:
 
 > You're all set. Here's what you can do right now:
 >

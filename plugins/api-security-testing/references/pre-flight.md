@@ -13,7 +13,7 @@ Resolve the canonical binary path for the current OS:
 
 Announce: `"Checking for 42c-ast..."`
 
-- **Missing** → announce `"The 42c-ast binary isn't installed yet — running setup now."` then invoke `42crunch-setup` for full setup. Do not proceed if setup fails.
+- **Missing** → announce `"The 42c-ast binary isn't installed yet — running setup now."` then invoke `42crunch-setup` as a **subroutine** (pass caller context: `pre-flight`). Do not proceed if setup fails. On success, continue to Step 2.
 - **Present** → silently follow `./binary-setup.md` (silent mode — see Caller Verbosity section in that file). The only output is `"42c-ast updated from vX to vY."` if an update was applied. If the manifest is unreachable, announce: `"Could not reach the update server — continuing with installed 42c-ast v<version>."` then continue.
 
 ---
@@ -32,7 +32,7 @@ grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
 - **Neither found** → call `AskUserQuestion`:
   - **question**: `"I don't see any 42Crunch credentials configured yet. I can walk you through setup now, or you can run 42crunch-setup manually when you're ready."`
   - **options**: `["Set up now", "Cancel — I'll run 42crunch-setup manually"]`
-  - If **Set up now** → invoke `42crunch-setup` (full setup). Do not proceed if setup fails.
+  - If **Set up now** → invoke `42crunch-setup` as a **subroutine** (pass caller context: `pre-flight`). Do not proceed if setup fails. On success, continue to Step 3.
   - If **Cancel** → stop.
 
 ---
