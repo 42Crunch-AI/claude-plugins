@@ -9,8 +9,8 @@
 
 ## Step 1 — Locate or Create Scan Config
 
-> **Freemium mode**: omit `--tag` from all commands in this step. This flag
-> requires platform access and must not be used in freemium mode.
+> **Freemium mode**: omit `--tag` and `--report-sqg` from all commands in this step.
+> These flags require platform access and must not be used in freemium mode.
 
 ### 1a — Resolve git root and alias
 
@@ -919,7 +919,7 @@ Run the full scan, capturing output to a temp file for extraction:
 
 ```bash
 # macOS / Linux — Platform mode
-API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false \
+API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false --report-sqg \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
 
 # macOS / Linux — Freemium mode
@@ -931,7 +931,7 @@ API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false \
 ```powershell
 # Windows — Platform mode
 $env:API_KEY="<value>"; $env:PLATFORM_HOST="<value>"
-& <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE> `
+& <binary> scan run --enrich=false --report-sqg <relative-oas-path> --conf-file <CONF_FILE> `
   > "$env:TEMP\42c-scan-out.json" 2>&1
 
 # Windows — Freemium mode
@@ -1230,6 +1230,7 @@ After all code fixes are applied or skipped, append to the final output:
 -d, --directory <path>  working directory (default: .42c at git root)
 --tag <cat>:<tag>       apply platform tag for SQGs / data dictionaries
 --output-report <file>  write just the config bundle (report section) to file
+--report-sqg            include sqg_pass in the report
 ```
 
 ### `scan conf generate` — important notes
