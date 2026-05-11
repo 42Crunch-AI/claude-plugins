@@ -132,6 +132,8 @@ off.
 |                  | Freemium: `<first-4-chars>••••••••`                 |
 |                  | (stored in <path>)                                  |
 | Platform host    | <url>  ← omit this row for freemium mode            |
+
+↑ <input_tokens> input · ↓ <output_tokens> output · ⚡ <cache_read_tokens> cached · Σ <total_tokens> total
 ```
 
 ---

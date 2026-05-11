@@ -164,6 +164,8 @@ Phase 2 — Scan Complete
   Authorization:  BOLA confirmed on 1 operation — OAS updated · server-side fix applied
   Conformance:    1 SQG-blocking issue fixed (OAS + code) · 3 informational findings surfaced
   OAS updated:    <path/to/openapi.json>
+
+  ↑ <input_tokens> input · ↓ <output_tokens> output · ⚡ <cache_read_tokens> cached · Σ <total_tokens> total
 ```
 
 Show only the one SQG line per phase that matches the current mode and result.

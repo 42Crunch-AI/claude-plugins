@@ -392,6 +392,8 @@ Coverage notes:
   - <any routes that were ambiguous or skipped, and why>
   - <any response bodies that could not be inferred>
   - <any assumptions made that the user should verify>
+
+↑ <input_tokens> input · ↓ <output_tokens> output · ⚡ <cache_read_tokens> cached · Σ <total_tokens> total
 ```
 
 ---
