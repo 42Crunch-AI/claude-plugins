@@ -25,7 +25,20 @@ explicit user permission before execution.
    file selection, use the context `"pipeline"` (e.g. "Which one should I run
    through the pipeline?"). Do not proceed if any step fails or the user cancels.
 
-2. **Resolve the scan target URL.**
+2. **Ask for Phase 1 permission.** Call `AskUserQuestion`:
+   - **question**: `"Ready to run a 42Crunch Audit on <filename>. This will analyse your OAS file and produce a scored report. Shall I proceed?"`
+   - **options**: `["Yes, proceed", "No, cancel"]`
+
+3. **Execute Phase 1 — Audit.** Mode is already resolved from pre-flight — do
+   not re-derive it. Read `../../references/audit-workflow.md` and apply only
+   the commands for the identified mode throughout.
+   The workflow runs the audit, then presents a **developer-readable,
+   risk-classified report** (SQG-Blocking / Security / Data Validation tiers)
+   with plain-English titles and risk descriptions — no raw rule IDs. It then
+   pauses and asks the user to consent before applying any fixes. Fixes are
+   only applied after explicit confirmation.
+
+4. **Resolve the scan target URL.**
 
    Read `servers[0].url` from the OAS file.
 
@@ -68,20 +81,7 @@ explicit user permission before execution.
      - If **Continue anyway** → proceed with warning noted.
      - If **Cancel** → stop.
 
-3. **Ask for Phase 1 permission.** Call `AskUserQuestion`:
-   - **question**: `"Ready to run a 42Crunch Audit on <filename>. This will analyse your OAS file and produce a scored report. Shall I proceed?"`
-   - **options**: `["Yes, proceed", "No, cancel"]`
-
-4. **Execute Phase 1 — Audit.** Mode is already resolved from pre-flight — do
-   not re-derive it. Read `../../references/audit-workflow.md` and apply only
-   the commands for the identified mode throughout.
-   The workflow runs the audit, then presents a **developer-readable,
-   risk-classified report** (SQG-Blocking / Security / Data Validation tiers)
-   with plain-English titles and risk descriptions — no raw rule IDs. It then
-   pauses and asks the user to consent before applying any fixes. Fixes are
-   only applied after explicit confirmation.
-
-5. **OAS analysis for Phase 2 preview** — run silently after Phase 1 completes,
+6. **OAS analysis for Phase 2 preview** — run silently after Phase 1 completes,
    before asking for Phase 2 permission.
 
    Read the OAS file and collect:
@@ -90,7 +90,7 @@ explicit user permission before execution.
    - BOLA candidate count: operations where the path has `{…Id}`, `{…Key}`, `{…Ref}`, or similar resource-ID placeholders AND the method is GET, PUT, PATCH, or DELETE
    - Whether the OAS contains sample data: any operation with `example`, `examples`, or `default` values on its request body or parameter schemas
 
-6. **Ask for Phase 2 permission.** Call `AskUserQuestion`:
+7. **Ask for Phase 2 permission.** Call `AskUserQuestion`:
    - **question**: (show the scan preview first, then ask)
      ```
      Ready to configure the scan?
@@ -104,7 +104,7 @@ explicit user permission before execution.
      `"I'm ready to start configuring the scan. I'll ask for credentials, classify your operations, and set up test scenarios — then run a happy path validation before the full scan. Shall I proceed?"`
    - **options**: `["Yes, let's configure", "No, cancel"]`
 
-7. **Execute Phase 2 — Scan.** Mode is already resolved from pre-flight — do
+8. **Execute Phase 2 — Scan.** Mode is already resolved from pre-flight — do
    not re-derive it. Read `../../references/scan-workflow.md` and apply only
    the commands for the identified mode throughout.
    The workflow runs the scan, then presents a **risk-classified findings
@@ -118,9 +118,9 @@ explicit user permission before execution.
   scenario chains), run `scan conf validate` and resolve all validation
   errors before continuing to happy-path or full scan runs.
 
-8. **Present the final combined summary** (see Output Format below).
+9. **Present the final combined summary** (see Output Format below).
 
-9. **Recommend next steps** based on the outcome:
+10. **Recommend next steps** based on the outcome:
 
     **If both phases passed and fixes were applied:**
     > "Both audit and scan are passing. Your OAS is more precise and your
