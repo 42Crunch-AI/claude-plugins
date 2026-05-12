@@ -82,30 +82,86 @@ Stop. Do not run audit or scan.
 
 ## Step 4 — Present tags and ask the user to pick one
 
-Group the tags by `categoryName`. For each category:
-- Show `categoryName` as the group heading
-- Show `categoryDescription` as a subtitle when non-empty
+Group the tags by `categoryName` and sort groups alphabetically. Within each
+group, sort tags alphabetically by `tagName`.
 
-For each tag within the group:
-- Show `tagName` as the option label
-- Show `tagDescription` as a description when non-empty
+Build a `categories` list where each entry has:
+- `name` — `categoryName`
+- `description` — `categoryDescription` (may be empty)
+- `tags[]` — all tags belonging to this category
+
+Use two working counters, reset at the start of this step:
+- `category_offset = 0`
+- `tag_offset = 0`
+
+---
+
+### 4a — Category selection (paginated)
+
+**Page size: 3 categories per page.**
+
+Compute the current page slice: `categories[category_offset : category_offset + 3]`.
+
+Build the option list:
+1. One option per category in the slice, labelled `<categoryName>`, with
+   `categoryDescription` as the description (omit if empty).
+2. If `category_offset + 3 < total categories` → add a final option:
+   **`"More categories…"`** — description: `"Show the next set of categories"`
 
 Call `AskUserQuestion`:
-- **question**: `"Which tag should be applied to <filename>?"`
-- **options**: one option per tag, labelled `<categoryName> — <tagName>`,
-  with `tagDescription` as the option description (omit if empty)
+- **question**: `"Which category does <filename> belong to?"`
+- **options**: the list built above (2–4 options)
 
-After the user selects a tag:
+**If `"More categories…"` selected**: set `category_offset += 3`, repeat 4a.
+
+**If a category is selected**: record `selected_category`, set `tag_offset = 0`,
+proceed to **4b**.
+
+---
+
+### 4b — Tag selection within a category (paginated)
+
+**Page size varies** depending on whether "← Back" is needed:
+- `multiple_categories = (total categories > 1)`
+- If `multiple_categories`: **2 tags per page** (slots reserved for "More…" and "← Back")
+- If single category: **3 tags per page** (slot reserved for "More…" only)
+
+Compute the current page slice:
+`selected_category.tags[tag_offset : tag_offset + page_size]`
+
+Build the option list:
+1. One option per tag in the slice, labelled `<tagName>`, with `tagDescription`
+   as the description (omit if empty).
+2. If there are more tags beyond this page → add **`"More tags…"`** —
+   description: `"Show the next set of tags in this category"`
+3. If `multiple_categories` → add **`"← Back to categories"`** —
+   description: `"Return to category selection"`
+
+Call `AskUserQuestion`:
+- **question**: `"Which tag should be applied to <filename>? (Category: <selected_category.name>)"`
+- **options**: the list built above (2–4 options)
+
+**If `"More tags…"` selected**: set `tag_offset += page_size`, repeat 4b.
+
+**If `"← Back to categories"` selected**: set `category_offset = 0`,
+`tag_offset = 0`, return to **4a**.
+
+**If a tag is selected**: record `selected_tag`, proceed to **4c**.
+
+---
+
+### 4c — Save the selection
 
 1. The `~/.42crunch/conf/` directory already exists (created during setup) —
    no need to create it.
 2. Write or update the tags file. Add or update the entry for this OAS file:
    ```yaml
-   <absolute-path-to-oas-file>: <categoryName>:<tagName>
+   <absolute-path-to-oas-file>: <selected_category.name>:<selected_tag.name>
    ```
    Preserve all other existing entries in the file.
 3. Announce:
-   > "`<categoryName>:<tagName>` saved. The audit will use this tag going forward."
+   > "`<selected_category.name>:<selected_tag.name>` saved. The audit will use
+   > this tag going forward."
 4. Proceed to **Announce: tag found**.
 
 ---
