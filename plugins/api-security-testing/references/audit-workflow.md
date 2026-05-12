@@ -77,13 +77,13 @@ rule IDs — translate each one using the table in `./audit-rule-translations.md
 
 **Platform mode** (`sqg.json` always present):
 ```
-Audit Score: <score> / 100  |  Security: <sec-score>/100  |  Data Validation: <data-score>/100
+Audit Score: <score> / 100  |  Security: <sec-score>/30  |  Data Validation: <data-score>/70
 SQG (<sqg-name>): PASSED / FAILED
 ```
 
 **Freemium mode** (no `sqg.json`):
 ```
-Audit Score: <score> / 100  |  Security: <sec-score>/100  |  Data Validation: <data-score>/100
+Audit Score: <score> / 100  |  Security: <sec-score>/30  |  Data Validation: <data-score>/70
 ```
 
 **Platform mode** — score ≥ 90, add one interpretation line:

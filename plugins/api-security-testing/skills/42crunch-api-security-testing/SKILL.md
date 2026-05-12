@@ -81,7 +81,7 @@ explicit user permission before execution.
      - If **Continue anyway** → proceed with warning noted.
      - If **Cancel** → stop.
 
-6. **OAS analysis for Phase 2 preview** — run silently after Phase 1 completes,
+5. **OAS analysis for Phase 2 preview** — run silently after Phase 1 completes,
    before asking for Phase 2 permission.
 
    Read the OAS file and collect:
@@ -90,7 +90,7 @@ explicit user permission before execution.
    - BOLA candidate count: operations where the path has `{…Id}`, `{…Key}`, `{…Ref}`, or similar resource-ID placeholders AND the method is GET, PUT, PATCH, or DELETE
    - Whether the OAS contains sample data: any operation with `example`, `examples`, or `default` values on its request body or parameter schemas
 
-7. **Ask for Phase 2 permission.** Call `AskUserQuestion`:
+6. **Ask for Phase 2 permission.** Call `AskUserQuestion`:
    - **question**: (show the scan preview first, then ask)
      ```
      Ready to configure the scan?
@@ -104,7 +104,7 @@ explicit user permission before execution.
      `"I'm ready to start configuring the scan. I'll ask for credentials, classify your operations, and set up test scenarios — then run a happy path validation before the full scan. Shall I proceed?"`
    - **options**: `["Yes, let's configure", "No, cancel"]`
 
-8. **Execute Phase 2 — Scan.** Mode is already resolved from pre-flight — do
+7. **Execute Phase 2 — Scan.** Mode is already resolved from pre-flight — do
    not re-derive it. Read `../../references/scan-workflow.md` and apply only
    the commands for the identified mode throughout.
    The workflow runs the scan, then presents a **risk-classified findings
@@ -118,9 +118,9 @@ explicit user permission before execution.
   scenario chains), run `scan conf validate` and resolve all validation
   errors before continuing to happy-path or full scan runs.
 
-9. **Present the final combined summary** (see Output Format below).
+8. **Present the final combined summary** (see Output Format below).
 
-10. **Recommend next steps** based on the outcome:
+9. **Recommend next steps** based on the outcome:
 
     **If both phases passed and fixes were applied:**
     > "Both audit and scan are passing. Your OAS is more precise and your
