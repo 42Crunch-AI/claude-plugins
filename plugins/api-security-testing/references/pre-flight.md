@@ -26,6 +26,10 @@ Read `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env` (Wind
 grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
 ```
 
+```powershell
+Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(FREEMIUM_TOKEN|API_KEY)=" 2>$null
+```
+
 - **`FREEMIUM_TOKEN`** is set → **Freemium mode**. Use `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>` in all commands. Proceed silently.
 - **`API_KEY`** starts with `api_` or `ide_` → **Platform mode**. Read `PLATFORM_HOST` from the same file (required — run `42crunch-setup` to reconfigure if missing). Proceed silently.
 - **`API_KEY`** is set but does **not** start with `api_` or `ide_` → warn the user: `"Your API key doesn't match the expected format (api_... or ide_...). Please check it or run 42crunch-setup to reconfigure."` Stop — do not proceed.

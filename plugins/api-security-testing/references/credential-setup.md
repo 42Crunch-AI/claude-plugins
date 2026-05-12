@@ -111,14 +111,31 @@ New-Item -ItemType Directory -Force -Path "$env:APPDATA\42Crunch\conf" | Out-Nul
 
 Write the file. Do not quote values. Do not add spaces around `=`.
 
-**Platform mode** — write to `~/.42crunch/conf/env`:
+**Platform mode**
+
+macOS / Linux — write to `~/.42crunch/conf/env`:
 
 ```
 API_KEY=<value>
 PLATFORM_HOST=<value>
 ```
 
-**Freemium mode** — write to `~/.42crunch/conf/env`:
+Windows — write to `%APPDATA%\42Crunch\conf\env`:
+
+```
+API_KEY=<value>
+PLATFORM_HOST=<value>
+```
+
+**Freemium mode**
+
+macOS / Linux — write to `~/.42crunch/conf/env`:
+
+```
+FREEMIUM_TOKEN=<value>
+```
+
+Windows — write to `%APPDATA%\42Crunch\conf\env`:
 
 ```
 FREEMIUM_TOKEN=<value>
@@ -138,24 +155,42 @@ Skip on Windows — `APPDATA` is already protected by Windows ACLs.
 
 Re-read the file and confirm the correct variable is present:
 
-**Platform mode:**
+**Platform mode (macOS / Linux):**
 ```bash
 grep "^API_KEY=" "$HOME/.42crunch/conf/env"
 ```
 
-**Freemium mode:**
+**Platform mode (Windows):**
+```powershell
+Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^API_KEY="
+```
+
+**Freemium mode (macOS / Linux):**
 ```bash
 grep "^FREEMIUM_TOKEN=" "$HOME/.42crunch/conf/env"
 ```
 
+**Freemium mode (Windows):**
+```powershell
+Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^FREEMIUM_TOKEN="
+```
+
 Display confirmation with the value **masked**:
 
-**Platform mode:**
+**Platform mode (macOS / Linux):**
 > Credentials saved to `~/.42crunch/conf/env`.
 > Mode: **Platform** | Key: `api_••••••••` | Host: `<PLATFORM_HOST>`
 
-**Freemium mode:**
+**Platform mode (Windows):**
+> Credentials saved to `%APPDATA%\42Crunch\conf\env`.
+> Mode: **Platform** | Key: `api_••••••••` | Host: `<PLATFORM_HOST>`
+
+**Freemium mode (macOS / Linux):**
 > Credentials saved to `~/.42crunch/conf/env`.
+> Mode: **Freemium** | Token: `<first-4-chars>••••••••`  ← show first 4 chars of the token
+
+**Freemium mode (Windows):**
+> Credentials saved to `%APPDATA%\42Crunch\conf\env`.
 > Mode: **Freemium** | Token: `<first-4-chars>••••••••`  ← show first 4 chars of the token
 
 ---
@@ -167,4 +202,4 @@ Display confirmation with the value **masked**:
 | User provides empty API Key | Re-prompt once with: "It looks like the key didn't come through — please paste it again (it usually starts with `api_` or `ide_`). If you're not sure where to find it, check the 42Crunch platform under **Settings → API Keys**." If still empty, stop with: "I wasn't able to capture your API key. Your binary is installed and working — when you're ready, run `42crunch-setup` again to finish credential setup." |
 | User provides empty Platform URL (Other) | Re-prompt once with: "I didn't catch the URL — please paste your platform address (it should look like `https://your-org.42crunch.cloud`)." If still empty, stop with: "I wasn't able to capture your platform URL. Your binary is installed — run `42crunch-setup` again whenever you have the details ready." |
 | User provides empty Freemium Token | Re-prompt once with: "The token didn't come through — please paste it again. You can find it in the registration confirmation email you received" If still empty, stop with: "I wasn't able to capture your Freemium token. Your binary is installed — run `42crunch-setup` again whenever you have the token ready." |
-| Cannot write to credentials file | Report the permission error; suggest `chmod u+w ~/.42crunch/conf/env` or creating the directory manually |
+| Cannot write to credentials file | Report the permission error. On macOS/Linux, suggest `chmod u+w ~/.42crunch/conf/env` or creating `~/.42crunch/conf` manually. On Windows, suggest verifying write access to `%APPDATA%\42Crunch\conf` and creating the folder manually if needed. |

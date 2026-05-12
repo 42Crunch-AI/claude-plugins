@@ -22,6 +22,22 @@ Resolve the canonical path for the current OS:
 - macOS/Linux: `$HOME/.42crunch/bin/42c-ast`
 - Windows: `%APPDATA%\42Crunch\bin\42c-ast.exe`
 
+Initialize `BIN_DIR` and `BINARY_PATH` before any version checks:
+
+```bash
+# macOS / Linux
+BIN_DIR="$HOME/.42crunch/bin"
+BINARY_PATH="$BIN_DIR/42c-ast"
+mkdir -p "$BIN_DIR"
+```
+
+```powershell
+# Windows
+$BIN_DIR = "$env:APPDATA\42Crunch\bin"
+$BINARY_PATH = "$BIN_DIR\42c-ast.exe"
+New-Item -ItemType Directory -Force -Path $BIN_DIR | Out-Null
+```
+
 - Binary **missing or broken** (`--version` exits non-zero or file absent) →
   continue to **Step 1** (detect OS/arch).
 - Binary **present** and `--version` exits 0 → capture the installed version:
@@ -76,8 +92,15 @@ New-Item -ItemType Directory -Force -Path $BIN_DIR | Out-Null
 ## Step 2 — Fetch the manifest and resolve download details
 
 ```bash
+# macOS / Linux
 curl -fsSL https://repo.42crunch.com/downloads/42c-ast-manifest.json \
   -o /tmp/42c-ast-manifest.json
+```
+
+```powershell
+# Windows
+$ManifestPath = Join-Path $env:TEMP "42c-ast-manifest.json"
+Invoke-WebRequest -Uri "https://repo.42crunch.com/downloads/42c-ast-manifest.json" -OutFile $ManifestPath
 ```
 
 The manifest is a JSON array. Filter entries by the `architecture` field
@@ -90,6 +113,7 @@ matching `PLATFORM_KEY`. From the matching entry, extract:
 | `sha256` | `EXPECTED_SHA256` |
 
 ```bash
+# macOS / Linux
 if command -v python3 &>/dev/null; then
   MANIFEST_OUTPUT=$(python3 - "$PLATFORM_KEY" << 'EOF'
 import json, sys
@@ -117,6 +141,20 @@ fi
 LATEST_VERSION=$(echo "$MANIFEST_OUTPUT" | sed -n '1p')
 DOWNLOAD_URL=$(echo "$MANIFEST_OUTPUT"   | sed -n '2p')
 EXPECTED_SHA256=$(echo "$MANIFEST_OUTPUT" | sed -n '3p')
+```
+
+```powershell
+# Windows
+$ManifestEntries = Get-Content $ManifestPath -Raw | ConvertFrom-Json
+$Match = $ManifestEntries | Where-Object { $_.architecture -eq $PLATFORM_KEY } | Select-Object -First 1
+if (-not $Match) {
+  Write-Error "ERROR: no manifest entry for $PLATFORM_KEY"
+  exit 1
+}
+
+$LATEST_VERSION = $Match.version
+$DOWNLOAD_URL = $Match.downloadUrl
+$EXPECTED_SHA256 = $Match.sha256
 ```
 
 If `INSTALLED_VERSION` (from Step 0) equals `LATEST_VERSION` → binary is
