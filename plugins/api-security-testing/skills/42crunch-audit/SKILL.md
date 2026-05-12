@@ -76,7 +76,6 @@ Audit Complete
   Issues fixed:   2 SQG-blocking  (0 security · 2 data validation)
   OAS updated:    <path/to/openapi.json>
 
-  ↑ <input_tokens> input · ↓ <output_tokens> output · ⚡ <cache_read_tokens> cached · Σ <total_tokens> total
 ```
 
 Show only the one SQG line that matches the current mode and result.
