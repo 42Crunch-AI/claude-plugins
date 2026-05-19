@@ -86,6 +86,11 @@ Run a quick end-to-end check:
 grep -E "^(API_KEY|TRIAL_TOKEN)=" "$HOME/.42crunch/conf/env"
 ```
 
+```powershell
+# Credentials (Windows)
+Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(API_KEY|TRIAL_TOKEN)="
+```
+
 If either check fails, report the specific failure and guide the user to resolve
 it before continuing.
 
