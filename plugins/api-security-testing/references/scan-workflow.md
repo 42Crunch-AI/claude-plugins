@@ -3,14 +3,14 @@
 > **Command conventions used throughout this file**
 > - `<binary>` — the full path resolved during binary discovery (e.g. `~/.42crunch/bin/42c-ast`). Never call `42c-ast` by name alone unless it is confirmed to be on PATH.
 > - **Platform mode**: prefix every command with `API_KEY="<resolved-value>" PLATFORM_HOST="<value>"` (both values read from `~/.42crunch/conf/env` on macOS/Linux or `%APPDATA%\42Crunch\conf\env` on Windows).
-> - **Freemium mode**: add `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>` to every command.
+> - **Free Trial mode**: add `--freemium-host stateless.42crunch.com:443` and `--token <TRIAL_TOKEN>` to every command.
 
 ---
 
 ## Step 1 — Locate or Create Scan Config
 
-> **Freemium mode**: omit `--tag` and `--report-sqg` from all commands in this step.
-> These flags require platform access and must not be used in freemium mode.
+> **Free Trial mode**: omit `--tag` and `--report-sqg` from all commands in this step.
+> These flags require platform access and must not be used in free trial mode.
 
 ### 1a — Resolve git root and alias
 
@@ -54,10 +54,10 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists.
   API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf validate <relative-oas-path> \
     --conf-file .42c/scan/<alias>/scanconf.json
 
-  # Freemium mode
+  # Free Trial mode
   <binary> scan conf validate <relative-oas-path> \
     --freemium-host stateless.42crunch.com:443 \
-    --token <FREEMIUM_TOKEN> \
+    --token <TRIAL_TOKEN> \
     --conf-file .42c/scan/<alias>/scanconf.json
   ```
 - If valid (`statusCode: 0`): store `CONF_FILE=.42c/scan/<alias>/scanconf.json` and proceed to Step 2.
@@ -69,7 +69,7 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists.
   mkdir -p .42c/scan/<alias>
   ```
 - Generate a baseline config using the **relative OAS path** (not alias, not absolute path).
-  Platform mode: include `--tag` only when a tag was resolved. Freemium mode: omit `--tag`.
+  Platform mode: include `--tag` only when a tag was resolved. Free Trial mode: omit `--tag`.
   ```bash
   # Platform mode
   API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf generate \
@@ -78,10 +78,10 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists.
     [--tag <category>:<tag>] \
     <relative-oas-path>
 
-  # Freemium mode
+  # Free Trial mode
   <binary> scan conf generate \
     --freemium-host stateless.42crunch.com:443 \
-    --token <FREEMIUM_TOKEN> \
+    --token <TRIAL_TOKEN> \
     --output-format json \
     --output .42c/scan/<alias>/scanconf.json \
     <relative-oas-path>
@@ -117,10 +117,10 @@ run an immediate config validation checkpoint before proceeding.
 API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf validate <relative-oas-path> \
   --conf-file <CONF_FILE>
 
-# Freemium mode
+# Free Trial mode
 <binary> scan conf validate <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
-  --token <FREEMIUM_TOKEN> \
+  --token <TRIAL_TOKEN> \
   --conf-file <CONF_FILE>
 ```
 
@@ -726,10 +726,10 @@ classification, scenario chains, and authorization test wiring), validate
 API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf validate <relative-oas-path> \
   --conf-file <CONF_FILE>
 
-# Freemium mode
+# Free Trial mode
 <binary> scan conf validate <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
-  --token <FREEMIUM_TOKEN> \
+  --token <TRIAL_TOKEN> \
   --conf-file <CONF_FILE>
 ```
 
@@ -762,10 +762,10 @@ operations with failing happy paths, producing a cascade of false positives.
 API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
 
-# macOS / Linux — Freemium mode
+# macOS / Linux — Free Trial mode
 <binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
-  --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
+  --token <TRIAL_TOKEN> --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
 ```
 
 ```powershell
@@ -774,10 +774,10 @@ $env:API_KEY="<value>"; $env:PLATFORM_HOST="<value>"
 & <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE> `
   > "$env:TEMP\42c-happy-out.json" 2>&1
 
-# Windows — Freemium mode
+# Windows — Free Trial mode
 & <binary> scan run --enrich=false <relative-oas-path> `
   --freemium-host stateless.42crunch.com:443 `
-  --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE> `
+  --token <TRIAL_TOKEN> --conf-file <CONF_FILE> `
   > "$env:TEMP\42c-happy-out.json" 2>&1
 ```
 
@@ -922,10 +922,10 @@ Run the full scan, capturing output to a temp file for extraction:
 API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false --report-sqg \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
 
-# macOS / Linux — Freemium mode
+# macOS / Linux — Free Trial mode
 <binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
-  --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
+  --token <TRIAL_TOKEN> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
 ```
 
 ```powershell
@@ -934,10 +934,10 @@ $env:API_KEY="<value>"; $env:PLATFORM_HOST="<value>"
 & <binary> scan run --enrich=false --report-sqg <relative-oas-path> --conf-file <CONF_FILE> `
   > "$env:TEMP\42c-scan-out.json" 2>&1
 
-# Windows — Freemium mode
+# Windows — Free Trial mode
 & <binary> scan run --enrich=false <relative-oas-path> `
   --freemium-host stateless.42crunch.com:443 `
-  --token <FREEMIUM_TOKEN> --conf-file <CONF_FILE> `
+  --token <TRIAL_TOKEN> --conf-file <CONF_FILE> `
   > "$env:TEMP\42c-scan-out.json" 2>&1
 ```
 
@@ -1038,9 +1038,9 @@ Then proceed to Step 7.
 
 ---
 
-**Freemium mode**: `sqgPass` will be absent or `true`. Present all findings
+**Free Trial mode**: `sqgPass` will be absent or `true`. Present all findings
 informally — no quality gate is enforced. Note to the user:
-> "In freemium mode the scan shows all findings for your information — there
+> "In free trial mode the scan shows all findings for your information — there
 > is no automatic quality gate. Authorization failures (red) are real
 > vulnerabilities worth fixing regardless of the gate (OWASP API1/API5).
 > Conformance findings (yellow) document gaps between your OAS contract and
@@ -1069,9 +1069,9 @@ Use plain-English descriptions — do not surface raw test keys or scan-report f
 Scan Results  |  SQG (<sqg-name>): PASSED / FAILED
 ```
 
-**Freemium mode header:**
+**Free Trial mode header:**
 ```
-Scan Results  |  SQG: N/A (Freemium — no scan SQG enforced)
+Scan Results  |  SQG: N/A (Free Trial — no scan SQG enforced)
 ```
 
 ```
@@ -1129,7 +1129,7 @@ If any BFLA finding was confirmed, add:
 3. Conformance findings **not** in `sqgDetails[].blockingRules` → surface only;
    do not include in the fix list.
 
-**Freemium mode:**
+**Free Trial mode:**
 1. All **authorization failures** (BOLA/BFLA confirmed) → always a fix candidate.
 2. There are no SQG-blocking conformance findings — all conformance findings are
    informational. Surface them to the user and ask which (if any) they want to fix.
@@ -1140,8 +1140,8 @@ If any BFLA finding was confirmed, add:
 - **question**: `"Here is the complete scan report (shown above). I can apply the following fixes to <filename>: 🔴 Authorization fixes: [list] 🟠 SQG-blocking conformance fixes: [list]. The 🟡 informational findings are not SQG-blocking and will not be fixed automatically — let me know if you'd like to address any of them too. What would you like to do?"`
 - **options**: `["Yes — apply all fixes now", "Show me the diff first", "No — skip fixes for now"]`
 
-**Freemium mode** — call `AskUserQuestion`:
-- **question**: `"Here is the complete scan report (shown above). No SQG enforcement applies in freemium mode. 🔴 Authorization fixes I can apply: [list] 🟡 Conformance findings (informational — your call whether to fix): [list]. What would you like to do?"`
+**Free Trial mode** — call `AskUserQuestion`:
+- **question**: `"Here is the complete scan report (shown above). No SQG enforcement applies in free trial mode. 🔴 Authorization fixes I can apply: [list] 🟡 Conformance findings (informational — your call whether to fix): [list]. What would you like to do?"`
 - **options**: `["Yes — apply the authorization fixes", "Show me the diff first", "No — skip fixes; summarise findings only"]`
 
 If the user chooses **"Show me the diff first"** in either mode, display the proposed

@@ -23,14 +23,14 @@ Announce: `"Checking for 42c-ast..."`
 Read `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env` (Windows):
 
 ```bash
-grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
+grep -E "^(TRIAL_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
 ```
 
 ```powershell
-Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(FREEMIUM_TOKEN|API_KEY)=" 2>$null
+Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(TRIAL_TOKEN|API_KEY)=" 2>$null
 ```
 
-- **`FREEMIUM_TOKEN`** is set → **Freemium mode**. Use `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>` in all commands. Proceed silently.
+- **`TRIAL_TOKEN`** is set → **Free Trial mode**. Use `--freemium-host stateless.42crunch.com:443` and `--token <TRIAL_TOKEN>` in all commands. Proceed silently.
 - **`API_KEY`** starts with `api_` or `ide_` → **Platform mode**. Read `PLATFORM_HOST` from the same file (required — run `42crunch-setup` to reconfigure if missing). Proceed silently.
 - **`API_KEY`** is set but does **not** start with `api_` or `ide_` → warn the user: `"Your API key doesn't match the expected format (api_... or ide_...). Please check it or run 42crunch-setup to reconfigure."` Stop — do not proceed.
 - **Neither found** → call `AskUserQuestion`:
@@ -57,7 +57,7 @@ Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(FREEMIUM_TOKEN|
 
 ## Step 4 — Tag Detection (platform mode only)
 
-Read `./tag-detection.md` and follow all steps. In freemium mode, skip
+Read `./tag-detection.md` and follow all steps. In free trial mode, skip
 tag detection entirely. The tag detection flow handles all outcomes — tag
 found, user assigns a tag, or user proceeds without one — before returning
 to the calling skill.
@@ -70,14 +70,14 @@ to the calling skill.
 |-------------------|-----------|-------------------------------------------|
 | `API_KEY`         | Platform  | `api_*` or `ide_*` token                 |
 | `PLATFORM_HOST`   | Platform  | Platform base URL                         |
-| `FREEMIUM_TOKEN`  | Freemium  | Base64 token, passed as `--token`         |
+| `TRIAL_TOKEN`  | Free Trial  | Base64 token, passed as `--token`         |
 
 **Platform mode**: `API_KEY` and `PLATFORM_HOST` set for every command.
 `--report-sqg` always applied. `--tag <category>:<tagname>` applied only
 when a tag is assigned.
 
-**Freemium mode**: `--freemium-host stateless.42crunch.com:443` and
-`--token <FREEMIUM_TOKEN>` for every command. No `--tag` or `--report-sqg`.
+**Free Trial mode**: `--freemium-host stateless.42crunch.com:443` and
+`--token <TRIAL_TOKEN>` for every command. No `--tag` or `--report-sqg`.
 
 ---
 

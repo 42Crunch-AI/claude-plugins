@@ -62,7 +62,7 @@ running `42crunch-audit` first.
        Auth:     <scheme types>  [+  second user needed — <N> BOLA candidate(s)]
        Samples:  OAS has sample data  /  No samples — you'll need to provide test data
        Tag:      <category>:<tagname>           ← platform mode only, when a tag is assigned; omit if no tag
-       Mode:     Platform / Freemium
+       Mode:     Platform / Free Trial
      ```
      `"I'm ready to start configuring the scan. I'll ask for credentials, classify your operations, and set up test scenarios — then run a happy path validation before the full scan. Shall I proceed?"`
    - **options**: `["Yes, let's configure", "No, cancel"]`
@@ -81,7 +81,7 @@ running `42crunch-audit` first.
   `scan conf validate` and resolve all validation errors before continuing to
   happy-path or full scan runs.
 
-   **Freemium mode**: no SQG is enforced for scan. Present all findings for
+   **Free Trial mode**: no SQG is enforced for scan. Present all findings for
    information. The user decides which (if any) to fix.
 
 6. **Present the final scan summary** (see Output Format below).
@@ -96,10 +96,10 @@ After the scan completes, produce a summary in this shape:
 
 ```
 Scan Complete
-  Mode:           Platform / Freemium
+  Mode:           Platform / Free Trial
   SQG:            PASSED  (<sqg-name> — your org's security quality gate is met)    ← platform mode, passed
   SQG:            FAILED  (<sqg-name> — the quality gate is not met; fixes above are required)    ← platform mode, failed
-  SQG:            N/A  (Freemium — scan findings are informational; no gate enforced)    ← freemium mode
+  SQG:            N/A  (Free Trial — scan findings are informational; no gate enforced)    ← free trial mode
   Tag:            <category>:<tagname>             ← platform mode only, when a tag is assigned; omit this row if no tag
   Authorization:  BOLA confirmed on 1 operation — OAS updated · server-side fix applied
   Conformance:    1 SQG-blocking issue fixed (OAS + code) · 3 informational findings surfaced
@@ -119,5 +119,5 @@ If the user declined to apply fixes or no issues were found, note that instead.
 |----------------|---------|
 | `SCAN42C_HOST` | Scan target base URL (overrides OAS `servers[0]`) — Both modes |
 
-All other variables (`API_KEY`, `PLATFORM_HOST`, `FREEMIUM_TOKEN`) and general
+All other variables (`API_KEY`, `PLATFORM_HOST`, `TRIAL_TOKEN`) and general
 constraints are defined in `../../references/pre-flight.md`.

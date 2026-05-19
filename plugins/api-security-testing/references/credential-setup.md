@@ -15,17 +15,17 @@ Silently check for an existing credentials file:
 
 ```bash
 # macOS / Linux
-grep -E "^(FREEMIUM_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
+grep -E "^(TRIAL_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
 ```
 
 ```powershell
 # Windows
-Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(FREEMIUM_TOKEN|API_KEY)=" 2>$null
+Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(TRIAL_TOKEN|API_KEY)=" 2>$null
 ```
 
 **Mode detection from the file:**
 
-- `FREEMIUM_TOKEN` is present → **Freemium mode**
+- `TRIAL_TOKEN` is present → **Free Trial mode**
 - `API_KEY` starts with `api_` or `ide_` → **Platform mode**
 
 **If a credential is found**, call `AskUserQuestion`:
@@ -34,7 +34,7 @@ Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(FREEMIUM_TOKEN|
 
 Masking rules: `api_••••••••` / `ide_••••••••` for platform tokens (keep
 prefix, replace remaining chars); show first 4 characters + `••••••••` for
-freemium tokens (e.g. `eyJh••••••••`).
+free trial tokens (e.g. `eyJh••••••••`).
 
 If keeping → **credential setup complete.**
 If replacing → continue to Step 2.
@@ -44,8 +44,8 @@ If replacing → continue to Step 2.
 ## Step 2 — Determine User Type
 
 Call `AskUserQuestion`:
-- **question**: `"Do you have an existing 42Crunch platform account? (Platform accounts log in to a URL like company.42crunch.cloud and use an API key. Freemium is a free personal account that covers full audit and scan functionalities.)"`
-- **options**: `["Yes — I have a platform account", "No — I'm using freemium"]`
+- **question**: `"Do you have an existing 42Crunch platform account? (Platform accounts log in to a URL like company.42crunch.cloud and use an API key. Free Trial is a free personal account that covers full audit and scan functionalities.)"`
+- **options**: `["Yes — I have a platform account", "No — I'm using Free Trial"]`
 
 ---
 
@@ -69,24 +69,24 @@ Store values as `API_KEY` and `PLATFORM_HOST`. Continue to Step 3.
 ### Path B — Not an Existing User
 
 Call `AskUserQuestion`:
-- **question**: `"Are you a registered 42Crunch Freemium user?"`
+- **question**: `"Are you a registered 42Crunch Free Trial user?"`
 - **options**: `["Yes — I have a token", "No — I need to register"]`
 
-#### Path B-1 — Registered Freemium user
+#### Path B-1 — Registered Free Trial user
 
 Call `AskUserQuestion`:
-- **question**: `"Please paste your Freemium Token (it's a long Base64 string from your registration confirmation email):"`
+- **question**: `"Please paste your Free Trial Token (it's a long Base64 string from your registration confirmation email):"`
 
-Wait for input. Store value as `FREEMIUM_TOKEN`. Continue to Step 3.
+Wait for input. Store value as `TRIAL_TOKEN`. Continue to Step 3.
 
 #### Path B-2 — Not registered
 
 Inform the user:
 > No problem — getting a free account takes a minute.
 >
-> 1. Visit **https://42crunch.com/freemium/**.
+> 1. Visit **[42Crunch Free Trial](https://42crunch.com/freemium/?source=claude)**.
 > 2. Fill in your email address, accept terms and conditions and click Submit.
-> 3. Check your inbox for a confirmation email that includes your freemium token.
+> 3. Check your inbox for a confirmation email that includes your free trial token.
 >
 > When you're ready, just say "continue" or "I have my token" and I'll pick up
 > exactly where we left off — you won't need to restart setup.
@@ -127,18 +127,18 @@ API_KEY=<value>
 PLATFORM_HOST=<value>
 ```
 
-**Freemium mode**
+**Free Trial mode**
 
 macOS / Linux — write to `~/.42crunch/conf/env`:
 
 ```
-FREEMIUM_TOKEN=<value>
+TRIAL_TOKEN=<value>
 ```
 
 Windows — write to `%APPDATA%\42Crunch\conf\env`:
 
 ```
-FREEMIUM_TOKEN=<value>
+TRIAL_TOKEN=<value>
 ```
 
 **Set restrictive permissions (macOS / Linux only):**
@@ -165,14 +165,14 @@ grep "^API_KEY=" "$HOME/.42crunch/conf/env"
 Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^API_KEY="
 ```
 
-**Freemium mode (macOS / Linux):**
+**Free Trial mode (macOS / Linux):**
 ```bash
-grep "^FREEMIUM_TOKEN=" "$HOME/.42crunch/conf/env"
+grep "^TRIAL_TOKEN=" "$HOME/.42crunch/conf/env"
 ```
 
-**Freemium mode (Windows):**
+**Free Trial mode (Windows):**
 ```powershell
-Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^FREEMIUM_TOKEN="
+Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^TRIAL_TOKEN="
 ```
 
 Display confirmation with the value **masked**:
@@ -185,13 +185,13 @@ Display confirmation with the value **masked**:
 > Credentials saved to `%APPDATA%\42Crunch\conf\env`.
 > Mode: **Platform** | Key: `api_••••••••` | Host: `<PLATFORM_HOST>`
 
-**Freemium mode (macOS / Linux):**
+**Free Trial mode (macOS / Linux):**
 > Credentials saved to `~/.42crunch/conf/env`.
-> Mode: **Freemium** | Token: `<first-4-chars>••••••••`  ← show first 4 chars of the token
+> Mode: **Free Trial** | Token: `<first-4-chars>••••••••`  ← show first 4 chars of the token
 
-**Freemium mode (Windows):**
+**Free Trial mode (Windows):**
 > Credentials saved to `%APPDATA%\42Crunch\conf\env`.
-> Mode: **Freemium** | Token: `<first-4-chars>••••••••`  ← show first 4 chars of the token
+> Mode: **Free Trial** | Token: `<first-4-chars>••••••••`  ← show first 4 chars of the token
 
 ---
 
@@ -201,5 +201,5 @@ Display confirmation with the value **masked**:
 |---|---|
 | User provides empty API Key | Re-prompt once with: "It looks like the key didn't come through — please paste it again (it usually starts with `api_` or `ide_`). If you're not sure where to find it, check the 42Crunch platform under **Settings → API Keys**." If still empty, stop with: "I wasn't able to capture your API key. Your binary is installed and working — when you're ready, run `42crunch-setup` again to finish credential setup." |
 | User provides empty Platform URL (Other) | Re-prompt once with: "I didn't catch the URL — please paste your platform address (it should look like `https://your-org.42crunch.cloud`)." If still empty, stop with: "I wasn't able to capture your platform URL. Your binary is installed — run `42crunch-setup` again whenever you have the details ready." |
-| User provides empty Freemium Token | Re-prompt once with: "The token didn't come through — please paste it again. You can find it in the registration confirmation email you received" If still empty, stop with: "I wasn't able to capture your Freemium token. Your binary is installed — run `42crunch-setup` again whenever you have the token ready." |
+| User provides empty Free Trial Token | Re-prompt once with: "The token didn't come through — please paste it again. You can find it in the registration confirmation email you received" If still empty, stop with: "I wasn't able to capture your Free Trial token. Your binary is installed — run `42crunch-setup` again whenever you have the token ready." |
 | Cannot write to credentials file | Report the permission error. On macOS/Linux, suggest `chmod u+w ~/.42crunch/conf/env` or creating `~/.42crunch/conf` manually. On Windows, suggest verifying write access to `%APPDATA%\42Crunch\conf` and creating the folder manually if needed. |

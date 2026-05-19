@@ -3,15 +3,15 @@
 > **Command conventions used throughout this file**
 > - `<binary>` — the full path resolved during binary discovery (e.g. `~/.42crunch/bin/42c-ast`). Never call `42c-ast` by name alone unless it is confirmed to be on PATH.
 > - **Platform mode**: prefix every command with `API_KEY="<resolved-value>" PLATFORM_HOST="<value>"` (both values read from `~/.42crunch/conf/env` on macOS/Linux or `%APPDATA%\42Crunch\conf\env` on Windows).
-> - **Freemium mode**: add `--freemium-host stateless.42crunch.com:443` and `--token <FREEMIUM_TOKEN>` to every command.
+> - **Free Trial mode**: add `--freemium-host stateless.42crunch.com:443` and `--token <TRIAL_TOKEN>` to every command.
 > - **Score tracking**: record `initial_score`, `initial_sec_score`, and `initial_data_score` immediately after the first parse (Step 2). These are used to build the before/after comparison in the final summary.
 
 ---
 
 ## Step 1 — Run the Audit
 
-> **Freemium mode**: omit `--tag` and `--report-sqg` from all commands in this
-> step. These flags require platform access and must not be used in freemium mode.
+> **Free Trial mode**: omit `--tag` and `--report-sqg` from all commands in this
+> step. These flags require platform access and must not be used in free trial mode.
 
 Resolve a platform-appropriate output directory and create it if it does not exist:
 
@@ -39,13 +39,13 @@ API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
   <path-to-oas-file>
 ```
 
-### Freemium mode
+### Free Trial mode
 
 ```bash
 <binary> audit run \
   --enrich=false \
   --freemium-host stateless.42crunch.com:443 \
-  --token <FREEMIUM_TOKEN> \
+  --token <TRIAL_TOKEN> \
   --output "$OUTPUT_DIR/report.json" \
   --output-format json \
   <path-to-oas-file>
@@ -57,7 +57,7 @@ API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
 |---------------|----------------------------------------------------------------------------------------------------|
 | `report.json` | Audit results                                                                                      |
 | `todo.json`   | Same as report.json but with `index[]` for OAS path resolution — **prefer this file**              |
-| `sqg.json`    | SQG result — written in platform mode whenever `--report-sqg` is passed (with or without `--tag`). Not written in freemium mode. |
+| `sqg.json`    | SQG result — written in platform mode whenever `--report-sqg` is passed (with or without `--tag`). Not written in free trial mode. |
 
 ---
 
@@ -81,7 +81,7 @@ Audit Score: <score> / 100  |  Security: <sec-score>/30  |  Data Validation: <da
 SQG (<sqg-name>): PASSED / FAILED
 ```
 
-**Freemium mode** (no `sqg.json`):
+**Free Trial mode** (no `sqg.json`):
 ```
 Audit Score: <score> / 100  |  Security: <sec-score>/30  |  Data Validation: <data-score>/70
 ```
@@ -93,7 +93,7 @@ Otherwise omit the interpretation line; SQG PASSED/FAILED in the headline is the
 **Platform mode only** — when the score crosses from below 70 to 70 or above after fixes are applied, add:
 > `This improvement moves your API from failing to passing the SQG threshold.`
 
-**Freemium mode only** — before rendering the findings report, prompt the user for session
+**Free Trial mode only** — before rendering the findings report, prompt the user for session
 thresholds (call `AskUserQuestion` with two questions):
 - **Question 1**: `"What minimum score are you targeting for this API?"` — options:
   `["90+ — Excellent", "70 — Good baseline", "50 — Acceptable for now", "Custom — I'll enter a number"]`
@@ -178,7 +178,7 @@ if sqg:
     if sqg["acceptance"] != "yes":
         blocking_ids = set(sqg["sqgsDetail"][0]["directives"].get("issueRules", []))
 else:
-    # Freemium mode: use user-defined blocking_severity_threshold from the
+    # Free Trial mode: use user-defined blocking_severity_threshold from the
     # session threshold prompt (CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1)
     for section in ["security", "data"]:
         for issue_id, issue_data in d[section]["issues"].items():
@@ -271,7 +271,7 @@ For each SQG-blocking issue the user has approved:
 After all fixes are applied, re-run the audit (**Step 1**) to confirm the SQG
 now passes:
 - **Platform mode**: confirm `sqg["acceptance"]` is `"yes"` in the new `sqg.json`.
-- **Freemium mode**: confirm the new score meets `target_score` and no issues
+- **Free Trial mode**: confirm the new score meets `target_score` and no issues
   with criticality ≥ `blocking_severity_threshold` remain in `todo.json`.
 
 After confirming the SQG passes, compute the before/after score deltas and

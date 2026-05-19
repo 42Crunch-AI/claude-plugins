@@ -5,8 +5,8 @@
 Resolve the 42Crunch platform tag associated with the OAS file, then announce
 the result. Use the resolved tag in audit and scan command flags.
 
-**Freemium mode**: skip this entire document — tag detection requires platform
-access. Freemium mode handling is described in `audit-workflow.md` and
+**Free Trial mode**: skip this entire document — tag detection requires platform
+access. Free Trial mode handling is described in `audit-workflow.md` and
 `scan-workflow.md`.
 
 ---
