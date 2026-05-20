@@ -447,41 +447,48 @@ Call `AskUserQuestion`:
 
 ## Step 4 — Build Scenario Chains
 
-For every Class-B operation, inject a multi-step `happy.path` scenario into
-the scan config. Show the user each proposed chain in plain English before
-writing it.
+For every Class-B operation, inject an operation-level `before` dependency step
+along-side the `happy.path` scenario. The `before` step creates or fetches the
+resource, while the `happy.path` step executes the target request. Show the user
+each proposed chain in plain English before writing it.
 
 ### Class-B: dependency chain pattern
 
 ```json
-"scenarios": [
-  {
-    "key": "happy.path",
-    "requests": [
-      {
-        "$ref": "#/operations/<CreatorOperationId>/request",
-        "responses": {
-          "<successCode>": {
-            "expectations": { "httpStatus": <successCode> },
-            "variableAssignments": {
-              "<varName>": {
-                "in": "body",
-                "from": "response",
-                "contentType": "json",
-                "path": { "type": "jsonPointer", "value": "/<fieldName>" }
-              }
+"<OperationId>": {
+  "operationId": "<OperationId>",
+  "request": { ... },
+  "before": [
+    {
+      "$ref": "#/operations/<CreatorOperationId>/request",
+      "responses": {
+        "<successCode>": {
+          "expectations": { "httpStatus": <successCode> },
+          "variableAssignments": {
+            "<varName>": {
+              "in": "body",
+              "from": "response",
+              "contentType": "json",
+              "path": { "type": "jsonPointer", "value": "/<fieldName>" }
             }
           }
         }
-      },
-      {
-        "fuzzing": true,
-        "$ref": "#/operations/<TargetOperationId>/request"
       }
-    ],
-    "fuzzing": true
-  }
-]
+    }
+  ],
+  "scenarios": [
+    {
+      "key": "happy.path",
+      "requests": [
+        {
+          "fuzzing": true,
+          "$ref": "#/operations/<OperationId>/request"
+        }
+      ],
+      "fuzzing": true
+    }
+  ]
+}
 ```
 
 The `<varName>` captured from the creator's response is then referenced as
