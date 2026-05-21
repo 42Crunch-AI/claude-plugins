@@ -150,8 +150,8 @@ off.
   it. Always mask it (`api_••••••••` / `ide_••••••••` for platform tokens — keep
   prefix, replace rest; `<first-4-chars>••••••••` for free trial tokens, e.g.
   `eyJh••••••••`).
-- Use `bash_tool` for all shell commands; use `str_replace_editor` or
-  `create_file` when writing config files — never shell redirection.
+- Use the `Bash` tool for all shell commands; use the `Edit` or `Write`
+  tools when writing config files — never shell redirection.
 - Use `curl` for downloads; fall back to `wget` if `curl` is unavailable. On
   Windows use `Invoke-WebRequest`.
 - On Windows: binary filename is `42c-ast.exe`, paths use `\`, config lives in

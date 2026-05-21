@@ -83,8 +83,8 @@ when a tag is assigned.
 
 ## General Constraints
 
-- Use `bash_tool` to execute all `42c-ast` commands.
-- Use `str_replace` or `create_file` to apply fixes to the OAS file.
+- Use the `Bash` tool to execute all `42c-ast` commands.
+- Use the `Edit` or `Write` tools to apply fixes to the OAS file.
 - Never modify the OAS file without first describing what will change.
 - All credential inputs are ephemeral in-session values. Do not write tokens
   or passwords to disk outside of scan config files that already expect them.
