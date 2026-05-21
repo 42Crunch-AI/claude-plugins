@@ -61,6 +61,7 @@ Determine the current platform and resolve `BIN_DIR` and `BINARY_PATH`:
 | Linux | x86_64 | `linux-amd64` | `$HOME/.42crunch/bin` | `$BIN_DIR/42c-ast` |
 | Linux | arm64 | `linux-arm64` | `$HOME/.42crunch/bin` | `$BIN_DIR/42c-ast` |
 | Windows | x86_64 | `windows-amd64` | `%APPDATA%\42Crunch\bin` | `%BIN_DIR%\42c-ast.exe` |
+| Windows | arm64 | `windows-arm64` | `%APPDATA%\42Crunch\bin` | `%BIN_DIR%\42c-ast.exe` |
 
 ```bash
 # macOS / Linux
@@ -79,7 +80,11 @@ mkdir -p "$BIN_DIR"
 
 ```powershell
 # Windows
-$PLATFORM_KEY = "windows-amd64"
+if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") {
+  $PLATFORM_KEY = "windows-arm64"
+} else {
+  $PLATFORM_KEY = "windows-amd64"
+}
 $BIN_DIR = "$env:APPDATA\42Crunch\bin"
 $BINARY_PATH = "$BIN_DIR\42c-ast.exe"
 New-Item -ItemType Directory -Force -Path $BIN_DIR | Out-Null
@@ -91,8 +96,15 @@ New-Item -ItemType Directory -Force -Path $BIN_DIR | Out-Null
 
 ```bash
 # macOS / Linux
-curl -fsSL https://repo.42crunch.com/downloads/42c-ast-manifest.json \
-  -o /tmp/42c-ast-manifest.json
+if command -v curl &>/dev/null; then
+  curl -fsSL https://repo.42crunch.com/downloads/42c-ast-manifest.json \
+    -o /tmp/42c-ast-manifest.json
+elif command -v wget &>/dev/null; then
+  wget -q -O /tmp/42c-ast-manifest.json \
+    https://repo.42crunch.com/downloads/42c-ast-manifest.json
+else
+  echo "ERROR: curl or wget is required to download the manifest"; exit 1
+fi
 ```
 
 ```powershell
@@ -168,10 +180,20 @@ Step 3.
 ```bash
 # macOS / Linux
 TMP_BIN="/tmp/42c-ast-download"
-curl -fsSL "$DOWNLOAD_URL" -o "$TMP_BIN"
+if command -v curl &>/dev/null; then
+  curl -fsSL "$DOWNLOAD_URL" -o "$TMP_BIN"
+elif command -v wget &>/dev/null; then
+  wget -q -O "$TMP_BIN" "$DOWNLOAD_URL"
+else
+  echo "ERROR: curl or wget is required to download the binary"; exit 1
+fi
 
 # Verify SHA-256
-ACTUAL_SHA=$(shasum -a 256 "$TMP_BIN" | awk '{print $1}')
+if command -v sha256sum &>/dev/null; then
+  ACTUAL_SHA=$(sha256sum "$TMP_BIN" | awk '{print $1}')
+else
+  ACTUAL_SHA=$(shasum -a 256 "$TMP_BIN" | awk '{print $1}')
+fi
 if [ "$ACTUAL_SHA" != "$EXPECTED_SHA256" ]; then
   echo "SHA-256 mismatch — aborting install."
   rm -f "$TMP_BIN"

@@ -132,11 +132,11 @@ off.
 | Item             | Status                                              |
 |------------------|-----------------------------------------------------|
 | Binary           | <BINARY_PATH> v<version>                            |
-| Credential mode  | <Platform \| Free Trial>                              |
+| Credential mode  | <Platform \| Free Trial>                            |
 | API key / Token  | Platform: `api_••••••••` or `ide_••••••••`          |
-|                  | Free Trial: `<first-4-chars>••••••••`                 |
+|                  | Free Trial: `<first-4-chars>••••••••`               |
 |                  | (stored in <path>)                                  |
-| Platform host    | <url>  ← omit this row for free trial mode            |
+| Platform host    | <url>  ← omit this row for free trial mode          |
 
 ```
 
@@ -163,4 +163,4 @@ off.
 |-----------------|----------------------------------|-----------------|
 | `API_KEY`       | *(required)*                     | Platform        |
 | `PLATFORM_HOST` | *(set during setup)*             | Platform only   |
-| `TRIAL_TOKEN`| *(required)*                     | Free Trial        |
+| `TRIAL_TOKEN`.  | *(required)*                     | Free Trial      |
