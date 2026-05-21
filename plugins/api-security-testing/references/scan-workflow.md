@@ -4,6 +4,7 @@
 > - `<binary>` — the full path resolved during binary discovery (e.g. `~/.42crunch/bin/42c-ast`). Never call `42c-ast` by name alone unless it is confirmed to be on PATH.
 > - **Platform mode**: prefix every command with `API_KEY="<resolved-value>" PLATFORM_HOST="<value>"` (both values read from `~/.42crunch/conf/env` on macOS/Linux or `%APPDATA%\42Crunch\conf\env` on Windows).
 > - **Free Trial mode**: add `--freemium-host stateless.42crunch.com:443` and `--token <TRIAL_TOKEN>` to every command.
+> - **PowerShell string quoting**: when a variable is immediately followed by `:` inside a double-quoted string, PowerShell parses `$varName:` as a PSDrive reference (like `$env:TEMP`) and throws `InvalidVariableReferenceWithDrive`. Always use `${varName}` to delimit the name — e.g. `"${opName}: ..."` not `"$opName: ..."`. This applies to any inline PowerShell generated during the session, not just the static snippets below.
 
 ---
 
