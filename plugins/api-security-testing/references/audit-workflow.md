@@ -112,7 +112,12 @@ Then add one score interpretation line:
 
 ### Parsing reference
 
-Extract only the needed fields — do not read the raw file into context:
+Extract only the needed fields — do not read the raw file into context.
+
+> **Platform note**: macOS/Linux use the Python snippets below. Windows users
+> should use the PowerShell equivalents that follow.
+
+**macOS / Linux (Python)**
 
 ```bash
 python3 << 'EOF'
@@ -153,6 +158,45 @@ blocking = [r for d in sqg.get("processingDetails", []) for r in d.get("blocking
 if blocking:
     print(f"blocking_rules: {', '.join(blocking)}")
 EOF
+```
+
+**Windows (PowerShell)**
+
+```powershell
+$d = Get-Content "$OUTPUT_DIR\todo.json" | ConvertFrom-Json
+$score     = $d.score
+$secScore  = $d.security.score
+$dataScore = $d.data.score
+Write-Host "score: $score  security: $secScore  data: $dataScore"
+
+$issues = @()
+foreach ($section in @("security", "data")) {
+    $sectionIssues = $d.$section.issues
+    foreach ($issueId in ($sectionIssues | Get-Member -MemberType NoteProperty).Name) {
+        $issueData = $sectionIssues.$issueId
+        $crit  = $issueData.criticality
+        $count = if ($issueData.issues) { $issueData.issues.Count } else { 0 }
+        $issues += [PSCustomObject]@{ id=$issueId; section=$section; criticality=$crit; count=$count }
+    }
+}
+
+if ($issues.Count -gt 0) {
+    Write-Host "`nissues[$($issues.Count)]{id,section,criticality,count}:"
+    foreach ($i in $issues) {
+        Write-Host "  $($i.id),$($i.section),$($i.criticality),$($i.count)"
+    }
+}
+```
+
+```powershell
+# sqg.json (platform mode only)
+$sqg = Get-Content "$OUTPUT_DIR\sqg.json" | ConvertFrom-Json
+Write-Host "sqg_acceptance: $($sqg.acceptance)"
+Write-Host "sqg_name: $($sqg.sqgsDetail[0].name)"
+$blocking = $sqg.processingDetails | ForEach-Object { $_.blockingRules } | Where-Object { $_ }
+if ($blocking) {
+    Write-Host "blocking_rules: $($blocking -join ', ')"
+}
 ```
 
 Use the extracted output above for all display and fix logic. Never include
