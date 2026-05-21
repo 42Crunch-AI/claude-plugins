@@ -788,7 +788,10 @@ $env:API_KEY="<value>"; $env:PLATFORM_HOST="<value>"
   > "$env:TEMP\42c-happy-out.json" 2>&1
 ```
 
-Extract only failing happy paths — never include raw output in your response:
+Extract only failing happy paths — never include raw output in your response.
+
+> **Platform note**: macOS/Linux use the Python snippet below. Windows users
+> should use the PowerShell equivalent that follows.
 
 ```bash
 # macOS / Linux
@@ -819,30 +822,30 @@ EOF
 
 ```powershell
 # Windows
-python3 -c "
-import json, re, os
-raw = open(os.path.join(os.environ['TEMP'], '42c-happy-out.json')).read()
-match = re.search(r'\{[\s\S]*\}', raw)
-if not match:
-    print('No JSON in output')
-    exit(0)
-data = json.loads(match.group())
-results = data.get('results', data.get('scanResults', []))
-if isinstance(results, dict):
-    results = [results]
-fails = [
-    (r.get('operationId', r.get('path','?')), t.get('testKey','?'), t.get('httpStatus',''), t.get('reason',''))
-    for r in results
-    for t in r.get('testResults', [])
-    if t.get('status') == 'fail' and 'happy' in t.get('testKey','').lower()
-]
-if fails:
-    print(f'happy_path_failures[{len(fails)}]{{operation,test,status,reason}}:')
-    for op, test, code, reason in fails:
-        print(f'  {op},{test},{code},{reason[:60]}')
-else:
-    print('happy_path_failures: none')
-"
+$raw = Get-Content "$env:TEMP\42c-happy-out.json" -Raw
+$jsonMatch = [regex]::Match($raw, '\{[\s\S]*\}')
+if (-not $jsonMatch.Success) { Write-Host "No JSON in output"; exit }
+$data = $jsonMatch.Value | ConvertFrom-Json
+$results = if ($data.results) { $data.results } elseif ($data.scanResults) { $data.scanResults } else { @() }
+if ($results -is [PSCustomObject]) { $results = @($results) }
+$fails = @()
+foreach ($r in $results) {
+    foreach ($t in $r.testResults) {
+        if ($t.status -eq 'fail' -and $t.testKey -match 'happy') {
+            $op     = if ($r.operationId) { $r.operationId } elseif ($r.path) { $r.path } else { '?' }
+            $test   = if ($t.testKey) { $t.testKey } else { '?' }
+            $code   = if ($t.httpStatus) { $t.httpStatus } else { '' }
+            $reason = if ($t.reason) { $t.reason.Substring(0, [Math]::Min(60, $t.reason.Length)) } else { '' }
+            $fails += "$op,$test,$code,$reason"
+        }
+    }
+}
+if ($fails.Count -gt 0) {
+    Write-Host "happy_path_failures[$($fails.Count)]{operation,test,status,reason}:"
+    foreach ($f in $fails) { Write-Host "  $f" }
+} else {
+    Write-Host "happy_path_failures: none"
+}
 ```
 
 ### Parse results per operation
@@ -870,7 +873,7 @@ failing operation before requesting manual input.
 
 ### Iteration
 
-After resolving each batch of failures, re-run using the same command as above (output to `/tmp/42c-happy-out.json` on macOS/Linux, `%TEMP%\42c-happy-out.json` on Windows) and re-extract with the same Python snippet.
+After resolving each batch of failures, re-run using the same command as above (output to `/tmp/42c-happy-out.json` on macOS/Linux, `%TEMP%\42c-happy-out.json` on Windows) and re-extract with the same extraction snippet above.
 
 For each operation where the root cause cannot be resolved (e.g. the required
 resource cannot be created in this environment), call `AskUserQuestion`:
@@ -950,7 +953,10 @@ $env:API_KEY="<value>"; $env:PLATFORM_HOST="<value>"
 
 **Immediately after the command completes**, extract the summary as TOON
 (Token-Oriented Object Notation — https://github.com/toon-format/toon) —
-never include raw stdout content in your response:
+never include raw stdout content in your response.
+
+> **Platform note**: macOS/Linux use the Python snippet below. Windows users
+> should use the PowerShell equivalent that follows.
 
 ```bash
 # macOS / Linux
@@ -991,36 +997,36 @@ EOF
 
 ```powershell
 # Windows
-python3 -c "
-import json, re, os
-raw = open(os.path.join(os.environ['TEMP'], '42c-scan-out.json')).read()
-match = re.search(r'\{[\s\S]*\}', raw)
-if not match:
-    print('No JSON found in scan output')
-    exit(0)
-data = json.loads(match.group())
-sqg = 'PASSED' if data.get('sqgPass') else ('FAILED' if 'sqgPass' in data else 'N/A')
-print(f'sqgPass: {sqg}')
-for d in data.get('sqgDetails', []):
-    rules = d.get('blockingRules', [])
-    if rules:
-        print(f'blockingRules[{len(rules)}]: {chr(44).join(rules)}')
-results = data.get('results', data.get('scanResults', []))
-if isinstance(results, dict):
-    results = [results]
-failures = [
-    (r.get('operationId', r.get('path', '?')), t.get('testKey', '?'), t.get('severity', ''))
-    for r in results
-    for t in r.get('testResults', [])
-    if t.get('status') == 'fail'
-]
-if failures:
-    print(f'\nfailures[{len(failures)}]{{operation,test,severity}}:')
-    for op, test, sev in failures:
-        print(f'  {op},{test},{sev}')
-else:
-    print('failures: none')
-"
+$raw = Get-Content "$env:TEMP\42c-scan-out.json" -Raw
+$jsonMatch = [regex]::Match($raw, '\{[\s\S]*\}')
+if (-not $jsonMatch.Success) { Write-Host "No JSON found in scan output"; exit }
+$data = $jsonMatch.Value | ConvertFrom-Json
+$sqg = if ($null -ne $data.sqgPass) { if ($data.sqgPass) { 'PASSED' } else { 'FAILED' } } else { 'N/A' }
+Write-Host "sqgPass: $sqg"
+foreach ($d in $data.sqgDetails) {
+    if ($d.blockingRules -and $d.blockingRules.Count -gt 0) {
+        Write-Host "blockingRules[$($d.blockingRules.Count)]: $($d.blockingRules -join ', ')"
+    }
+}
+$results = if ($data.results) { $data.results } elseif ($data.scanResults) { $data.scanResults } else { @() }
+if ($results -is [PSCustomObject]) { $results = @($results) }
+$failures = @()
+foreach ($r in $results) {
+    foreach ($t in $r.testResults) {
+        if ($t.status -eq 'fail') {
+            $op  = if ($r.operationId) { $r.operationId } elseif ($r.path) { $r.path } else { '?' }
+            $test = if ($t.testKey) { $t.testKey } else { '?' }
+            $sev  = if ($t.severity) { $t.severity } else { '' }
+            $failures += "$op,$test,$sev"
+        }
+    }
+}
+if ($failures.Count -gt 0) {
+    Write-Host "`nfailures[$($failures.Count)]{operation,test,severity}:"
+    foreach ($f in $failures) { Write-Host "  $f" }
+} else {
+    Write-Host "failures: none"
+}
 ```
 
 Use only the TOON output above when rendering Step 7. Do not load or display
