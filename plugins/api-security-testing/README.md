@@ -26,16 +26,18 @@ The `42c-ast` binary is downloaded and kept up to date automatically on first us
 
 ## Installation
 
+> **Requirement:** The [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code/getting-started) is required to add marketplaces and install plugins using the commands below.
+
 Add the 42Crunch marketplace:
 
 ```
-/plugin marketplace add 42Crunch-AI/claude-plugins
+claude plugin marketplace add https://github.com/42Crunch-AI/claude-plugins
 ```
 
 Install the `api-security-testing` plugin:
 
 ```
-/plugin install api-security-testing@42crunch-marketplace
+claude plugin install api-security-testing@42crunch-marketplace
 ```
 
 ## Quick Start

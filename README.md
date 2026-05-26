@@ -19,12 +19,22 @@ plugins/                        # Claude plugins developed by 42Crunch
     LICENSE                     # License
 ```
 
+## Prerequisites
+
+The [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code/getting-started) is required to add marketplaces and install plugins using the `claude` CLI commands below.
+
 ## Adding this Marketplace
 
-Register the 42Crunch marketplace with Claude Code once, then install any plugin from it:
+Register the 42Crunch marketplace with Claude Code once, then install the plugin from it:
 
 ```
-/plugin marketplace add 42Crunch-AI/claude-plugins
+claude plugin marketplace add https://github.com/42Crunch-AI/claude-plugins
+```
+
+Or from an interactive Claude Code session:
+
+```
+/plugin marketplace add https://github.com/42Crunch-AI/claude-plugins
 ```
 
 ## Available Plugins
@@ -34,6 +44,14 @@ Register the 42Crunch marketplace with Claude Code once, then install any plugin
 AI-powered API security plugin backed by 42Crunch. Audit OpenAPI specs, detect OWASP API Security vulnerabilities (including BOLA/BFLA), run live conformance and authorization scans against running APIs, and apply AI-assisted fixes — all through natural language.
 
 **Install:**
+After registering the marketplace (see above), install the plugin:
+
+```
+claude plugin install api-security-testing@42crunch-marketplace
+```
+
+Or from an interactive Claude Code session:
+
 ```
 /plugin install api-security-testing@42crunch-marketplace
 ```
