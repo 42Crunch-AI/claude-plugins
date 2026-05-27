@@ -17,6 +17,12 @@ Generic structural reference for `scanconf.json` (version 2.0.0). Use this when 
 }
 ```
 
+After initial `scan conf generate`, `authenticationDetails` is initialized with
+one default credential per OpenAPI `securityScheme` present in the OAS. This
+includes scheme types such as bearer, oauth2, basic, and apiKey. Reuse each
+scheme's generated default credential as User1 instead of creating a second
+User1 credential entry.
+
 ### `runtimeConfiguration` — key flags
 
 Copy all fields verbatim from the generated config. Two fields change during the workflow:
@@ -27,6 +33,12 @@ Copy all fields verbatim from the generated config. Two fields change during the
 ```
 
 ### `environments.default.variables` — structure
+
+When a config is first generated, scanconf will auto-create one environment
+variable per security scheme defined in the OAS and mark these entries as
+`"required": true`. Normalize these
+generated security-scheme entries to `"required": false` unless strict runtime
+injection is intentionally required.
 
 ```json
 "host": {
@@ -40,6 +52,23 @@ Copy all fields verbatim from the generated config. Two fields change during the
 ```
 
 Add one entry per credential variable (user1, user2, throwaway, etc.).
+
+Credential variable example:
+
+```json
+"username": {
+  "name": "SCAN42C_USERNAME",
+  "from": "environment",
+  "required": false,
+  "default": "<user1-username>"
+},
+"password": {
+  "name": "SCAN42C_PASSWORD",
+  "from": "environment",
+  "required": false,
+  "default": "<user1-password>"
+}
+```
 
 ---
 
@@ -81,6 +110,12 @@ Same as above but add `"auth": ["AccessToken"]` inside the outer `request` objec
 
 #### Class-B — dependency chain (operation needs an ID from a prior response)
 
+**Required:** if the referenced creator operation contains template variables in
+its request (path/query/header/body), the `before` step must resolve
+those variables. Use step-level `environment` overrides unless those variables are
+already resolved globally in `environments.default.variables`, global static
+defaults, or a global `before` assignment.
+
 ```json
 "<OperationId>": {
   "operationId": "<OperationId>",
@@ -102,6 +137,10 @@ Same as above but add `"auth": ["AccessToken"]` inside the outer `request` objec
   "before": [
     {
       "$ref": "#/operations/<CreatorOperationId>/request",
+      "environment": {
+        "<creatorVar1>": "<value1>",
+        "<creatorVar2>": "<value2>"
+      },
       "responses": {
         "<success-status>": {
           "expectations": { "httpStatus": <success-status> },
@@ -121,6 +160,10 @@ Same as above but add `"auth": ["AccessToken"]` inside the outer `request` objec
   ]
 }
 ```
+
+Do not assume creator input variables provided in a different scenario step are
+available here. Each `before` chain must be independently runnable unless the
+variable is intentionally resolved at the global level.
 
 To add a BOLA authorization test, append `"authorizationTests": ["<BolaTestName>"]` at the operation level.
 
@@ -291,14 +334,37 @@ To add a BOLA authorization test, append `"authorizationTests": ["<BolaTestName>
             }
           ]
         },
+        "AdminToken": {
+          "credential": "{{AccessToken}}",
+          "requests": [
+            {
+              "$ref": "#/operations/<LoginOperationId>/request",
+              "environment": {
+                "<credential-var>": "{{<admin-credential-var>}}",
+                "<password-var>": "{{<admin-password-var>}}"
+              },
+              "responses": {
+                "200": {
+                  "expectations": { "httpStatus": 200 },
+                  "variableAssignments": {
+                    "AccessToken": {
+                      "in": "body", "from": "response", "contentType": "json",
+                      "path": { "type": "jsonPointer", "value": "/<token-field>" }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
         "<throwaway-credential-name>": {
           "credential": "{{AccessToken}}",
           "requests": [
             {
               "$ref": "#/operations/<LoginOperationId>/request",
               "environment": {
-                "<emailVar>": "<throwaway@example.com>",
-                "<credentialVar>": "<throwaway-value>"
+                "<credential-var>": "<throwaway@example.com>",
+                "<password-var>": "<throwaway-value>"
               },
               "responses": {
                 "200": {
@@ -321,6 +387,7 @@ To add a BOLA authorization test, append `"authorizationTests": ["<BolaTestName>
 ```
 
 - `User2Token` uses `environment` to override credential vars for the login step — no need to duplicate the login operation.
+- `AdminToken` uses `environment` overrides for admin credentials and is required for privileged (BFLA-candidate) operations.
 - `<throwaway-credential-name>` acquires its token via the login step at session start. The register step is placed in the operation's `before` block so the throwaway user exists before each scenario iteration; it accepts both 201 and 409 for idempotency. The operation that uses this credential sets `"auth": ["AccessToken/<throwaway-credential-name>"]` directly on its `request` definition — not as a scenario-step override.
 
 ---
@@ -339,6 +406,21 @@ To add a BOLA authorization test, append `"authorizationTests": ["<BolaTestName>
     "source": ["AccessToken/AdminToken"],
     "target": ["AccessToken/User1Token"]
   }
+}
+```
+
+For each privileged operation included in the BFLA test, pin the operation's
+auth to the admin credential in the operation request definition:
+
+```json
+"<PrivilegedOperationId>": {
+  "operationId": "<PrivilegedOperationId>",
+  "request": {
+    "operationId": "<PrivilegedOperationId>",
+    "auth": ["AccessToken/AdminToken"],
+    "request": { ... }
+  },
+  "authorizationTests": ["<BflaTestName>"]
 }
 ```
 
@@ -421,7 +503,11 @@ The key difference from an OAS-operation reference (`"$ref": "#/operations/<Oper
 |---|---|
 | Always use `$ref` in `requests` arrays — never inline `request` objects | Inline requests have no `operationId`; the VS Code extension rejects them |
 | `auth: ["AccessToken"]` goes in the outer `request` object, not inside `details` | `details` is the raw HTTP descriptor; auth injection is a scanner concern |
+| After first `scan conf generate`, set generated security-scheme env vars to `"required": false` | Generated security variables are often `"required": true`; leaving them required causes runtime scan errors when values are not provided |
+| After initial generation, reuse the default credential created for each security scheme as User1 | `scan conf generate` initializes one default credential per scheme; duplicating User1 credentials creates ambiguity and miswiring |
+| BFLA-candidate privileged operations must set operation-level auth to `"<SchemeName>/AdminToken"` (for example `"AccessToken/AdminToken"`) | Ensures happy path runs with admin privileges and BFLA swapping tests demote to low-privilege users |
 | `environment` overrides in a step apply only to that step | Safe credential/variable swap without duplicating the operation |
+| For Class-B/Class-D creator calls, use step-level `environment` overrides unless variables are already resolved globally (`environments.default.variables`, global static defaults, or global `before` assignments) | Prevents unresolved template variables while allowing intentional global wiring |
 | Never use `"skipped": true` on Class-D operations | The scanner ignores it and deletes the primary user, breaking subsequent tests |
 | Never override the token variable via `environment` to swap credentials on a Class-D operation | `authenticationDetails` tokens are cached at session start; environment overrides do not change which cached token is injected |
 | Class-D operations: set `"auth": ["AccessToken/<throwaway>"]` on the operation definition, not as a scenario-step override | The credential must be pinned at the operation level so the scanner uses the throwaway for ALL execution paths — happy path, fuzzing, and authorization tests |

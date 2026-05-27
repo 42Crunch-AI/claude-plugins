@@ -91,6 +91,19 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists.
 - If valid: store `CONF_FILE=.42c/scan/<alias>/scanconf.json` and proceed to Step 2.
 - If invalid: surface the error to the user and stop.
 
+**Scan Configuration Normalization after first generation (required):**
+- On first `scan conf generate`, the generated `environments.default.variables`
+  includes one variable per OpenAPI security scheme (for example bearer auth,
+  oauth2, apiKey, or basic auth variables) typically with `"required": true`.
+  - Normalize these generated security-related variables to `"required": false`
+    before proceeding, unless the user explicitly wants strict required inputs.
+- The generated `authenticationDetails` is also initialized with one default credential
+  per OpenAPI security scheme defined in the OAS (for example bearer, oauth2, basic, or apiKey).
+  - Use this generated default credential as the User 1 credential for that
+    scheme. Update/wire that default entry as needed; do not create an additional
+    User 1 credential unless the user explicitly asks for multiple primary
+    identities.
+
 ### 1c — Write target URL to config
 
 Write `SCAN_TARGET_URL` (confirmed in the skill's URL resolution step) into
@@ -100,6 +113,11 @@ checked before the workflow started.
 
 Important schema rule for `environments.default.variables`:
 - Variable entries must be objects with a source strategy, not raw string literals.
+- Keep generated security-scheme variables optional for scan execution — set `"required": false`
+  for each generated security-scheme variable in `environments.default.variables`.
+- For values used by operation templates (for example `{{username}}`, `{{password}}`),
+  add entries under `environments.default.variables` using `"from": "environment"`
+  with both `"name"` and `"required": false`.
 - Use this shape for scan variables:
   ```json
   "host": {
@@ -107,6 +125,18 @@ Important schema rule for `environments.default.variables`:
     "from": "environment",
     "required": false,
     "default": "<SCAN_TARGET_URL>"
+  },
+  "username": {
+    "name": "SCAN42C_USERNAME",
+    "from": "environment",
+    "required": false,
+    "default": "<user1-username>"
+  },
+  "password": {
+    "name": "SCAN42C_PASSWORD",
+    "from": "environment",
+    "required": false,
+    "default": "<user1-password>"
   }
   ```
 
@@ -215,31 +245,61 @@ formats, but the extension does not — always use `$ref` regardless.
 
 **Pattern:**
 ```json
-"<CredentialName>": {
-  "description": "<description>",
-  "credential": "{{<tokenVar>}}",
-  "requests": [
-    {
-      "$ref": "#/operations/<LoginOperationId>/request",
-      "responses": {
-        "200": {
-          "expectations": { "httpStatus": 200 },
-          "variableAssignments": {
-            "<tokenVar>": {
-              "in": "body", "from": "response", "contentType": "json",
-              "path": { "type": "jsonPointer", "value": "/<tokenField>" }
+"authenticationDetails": [
+  {
+    "<SchemeName>": {
+      "type": "<bearer|oauth2|basic|apiKey>",
+      "default": "<CredentialName>",
+      "credentials": {
+        "<CredentialName>": {
+          "description": "<description>",
+          "credential": "{{<tokenVar>}}",
+          "requests": [
+            {
+              "$ref": "#/operations/<LoginOperationId>/request",
+              "responses": {
+                "200": {
+                  "expectations": { "httpStatus": 200 },
+                  "variableAssignments": {
+                    "<tokenVar>": {
+                      "in": "body", "from": "response", "contentType": "json",
+                      "path": { "type": "jsonPointer", "value": "/<tokenField>" }
+                    }
+                  }
+                }
+              }
             }
-          }
+          ]
         }
       }
     }
-  ]
-}
+  }
+]
 ```
 
 Replace `<LoginOperationId>` with the `operationId` of the operation that issues the
 token (look for a `POST /login`, `POST /auth/token`, or equivalent). Replace
 `<tokenField>` with the JSON Pointer path to the token value in the response body.
+
+**Variable scoping — credential context only:**
+`variableAssignments` in a credential acquisition step are scoped to the credential
+context. Only the token variable `<tokenVar>` (the one referenced by `"credential"`) is reliably
+available in the operation context at scan time. Any extra variables captured here are NOT in the operation context during full fuzzing scans.
+
+**Rule:** capture only the credential (for example Bearer token, API key, or Basic Auth) 
+in `authenticationDetails`. For any other data needed from the login response, 
+add an explicit `before` block on each operation that needs it and capture the value
+there instead (See Step 4 — Class-B: dependency chain pattern).
+  - If many operations share the same variable, use the global 
+    before block (see Step 4 — Global `before` block). Do not rely on
+    variableAssignments in `authenticationDetails` for anything beyond the
+    credential token itself.
+
+**Rule:** use existing generated default credential for User 1.
+After initial scan config generation, treat the scheme's default generated
+credential in `authenticationDetails` as User 1. Populate or adjust that
+credential's `credential`, `requests`, and `variableAssignments` fields as
+needed instead of creating a second User 1 credential entry.
 
 **Second user (BOLA):** use `environment` to override the credential variables for that
 step without duplicating the operation:
@@ -274,36 +334,6 @@ variable names used in the referenced operation's `requestBody`. If the login op
 uses hardcoded values instead of `{{variables}}`, update its `requestBody` to use
 template variables first — otherwise `environment` overrides have no effect.
 
-**Multi-step credential (e.g. register then login):** add multiple entries to `requests`
-in sequence. The token capture goes on the last step:
-```json
-"requests": [
-  {
-    "$ref": "#/operations/<RegisterOperationId>/request",
-    "environment": { "<usernameVar>": "{{<throwawayUser>}}", ... },
-    "responses": {
-      "201": { "expectations": { "httpStatus": 201 } },
-      "409": { "expectations": { "httpStatus": 409 } }
-    }
-  },
-  {
-    "$ref": "#/operations/<LoginOperationId>/request",
-    "environment": { "<usernameVar>": "{{<throwawayUser>}}", ... },
-    "responses": {
-      "200": {
-        "expectations": { "httpStatus": 200 },
-        "variableAssignments": {
-          "<tokenVar>": {
-            "in": "body", "from": "response", "contentType": "json",
-            "path": { "type": "jsonPointer", "value": "/<tokenField>" }
-          }
-        }
-      }
-    }
-  }
-]
-```
-
 ---
 
 ## Step 2.5 — Test Data
@@ -334,10 +364,70 @@ Call `AskUserQuestion`:
 5. This table is used in Step 3 (classification) and Step 4 (scenario building) to
    auto-populate Class-C operations — no reactive import needed in Step 5.
 
-If re-seeding is needed after a destructive scan operation (Step 3 Class D), use
+If re-seeding is needed after a destructive scan operation (Step 3 Class-D), use
 the seed command captured here. If no seed command was provided and Class-D
 operations exist, note to the user that they may need to manually restore test
 records between scan runs if the primary user's account is deleted.
+
+---
+
+## Step 2.6 — Built-in Variables
+
+The scan config supports a set of built-in variables that generate dynamic values at scan runtime. These can be used in place of or concatenated with static string values for parameters and request body properties.
+
+| Variable | Description |
+|---|---|
+| `{{$randomString}}` | Random alphanumeric string of 20 characters |
+| `{{$randomuint}}` | Random uint32 integer |
+| `{{$uuid}}` | Unique UUID |
+| `{{$timestamp}}` | Current time in UNIX format |
+| `{{$timestamp3339}}` | Current date and time in RFC 3339 format |
+| `{{$randomFromSchema}}` | Value generated from the schema defined in the OAS |
+
+**When to use them:** built-in variables are most useful for operations that require unique values across iterations. For example, when testing a user registration endpoint, using a static email address causes the second and subsequent iterations to fail with `409 Conflict`. Instead, compose the value with a built-in variable to guarantee uniqueness each time:
+
+```json
+"email": "user{{$randomuint}}@email.com"
+```
+
+Built-in variables can be concatenated with any static string prefix or suffix. They are evaluated fresh on every request — each iteration gets a different value.
+
+**Where to place them — scenario-level `environment`, not global variables:**
+
+Do **not** put built-in variable expressions in `environments.default.variables`. Global variables must be static strings (or environment-variable overrides). Instead, pass built-in variable expressions in the `environment` block of the scenario request step that needs them:
+
+```json
+"scenarios": [
+  {
+    "key": "happy.path",
+    "fuzzing": true,
+    "requests": [
+      {
+        "fuzzing": true,
+        "$ref": "#/operations/UserRegistration/request",
+        "environment": {
+          "reg_username": "user{{$randomuint}}",
+          "reg_email": "user{{$randomuint}}@example.com",
+          "reg_password": "password"
+        }
+      }
+    ]
+  }
+]
+```
+
+This keeps the operation reusable: a `before` block that calls `UserRegistration` can supply its own fixed throwaway values in its own `environment` override, while the happy-path scenario independently supplies randomised values — neither one interferes with the other.
+
+**Common patterns:**
+
+```json
+"username": "testuser_{{$randomString}}",
+"email": "user{{$randomuint}}@example.com",
+"referenceId": "{{$uuid}}",
+"createdAt": "{{$timestamp3339}}"
+```
+
+Keep these available when classifying operations in Step 3 — Class-A operations that create uniquely-keyed resources (users, accounts, orders) should use built-in variables rather than static literals to avoid collision failures across scan iterations.
 
 ---
 
@@ -399,6 +489,14 @@ lookup table. Otherwise ask the user to provide the values directly.
 The operation destroys the currently authenticated principal's own resource
 (e.g. `DELETE /account`, `DELETE /users/me`, `DELETE /profile`).
 
+**Class-D requires the absence of a resource-identifying path parameter.** If the
+operation has a path parameter that names the target (e.g. `DELETE /users/{username}`,
+`DELETE /accounts/{accountId}`), it is NOT Class-D — the caller is naming an explicit
+target, not implicitly deleting themselves. Classify it as B or A instead, with a
+`before` block to seed the target resource if needed. Class-D applies only when the
+operation's sole implicit target is the authenticated user (no path parameter identifies
+a different resource).
+
 **Do NOT use `"skipped": true`** — the scanner ignores this field and will
 execute the operation against User1, deleting the primary test user and
 breaking all subsequent happy paths in the same run.
@@ -438,7 +536,7 @@ DeleteUser             | B      | yes   | UserRegistration → /{userId}
 DeleteAccount          | D      | no    | register+login throwaway → delete throwaway
 ```
 
-**`BOLA? = yes` has a direct consequence in Step 4:** every operation marked as a BOLA candidate will receive an additional BOLA test scenario (using User 2's token) alongside its happy path scenario. Every operation marked as a BFLA candidate will receive a BFLA test scenario (using User 1's low-privilege token).
+**`BOLA? = yes` has a direct consequence in Step 4:** every operation marked as a BOLA candidate will receive an additional BOLA test scenario (using User 2's token) alongside its happy path scenario. Every operation marked as a BFLA candidate must run its happy path as admin (`auth: ["<SchemeName>/AdminToken"]`) and will receive a BFLA test scenario that replays the same request with User 1's low-privilege token.
 
 Call `AskUserQuestion`:
 - **question**: `"Here is the proposed operation classification (shown above). Does this look correct, or do you need to correct any misclassifications?"`
@@ -453,6 +551,21 @@ along-side the `happy.path` scenario. The `before` step creates or fetches the
 resource, while the `happy.path` step executes the target request. Show the user
 each proposed chain in plain English before writing it.
 
+#### `before` block rules:
+1. Always prefer to reference existing OAS operations in `before` blocks — avoid creating
+a utility request as a substitute. If an operation already exists in the spec
+(e.g. `UserRegistration`, `UserLogin`), use `"$ref": "#/operations/<OperationId>/request"`
+with `environment` overrides to supply different inputs. Only add an entry to
+the top-level `requests` section when no OAS operation covers the call.
+
+2. Mandatory variable wiring rule — if the referenced creator operation uses any
+template variables in `paths`, `queries`, `headers`, or `requestBody`, every
+`before` step that references it MUST resolve those variables. Use
+a step-level `environment` block unless the variables are already resolved
+globally via `environments.default.variables`, global static defaults, or a
+global `before` assignment. Do not rely on values supplied only in another
+scenario.
+
 ### Class-B: dependency chain pattern
 
 ```json
@@ -462,6 +575,10 @@ each proposed chain in plain English before writing it.
   "before": [
     {
       "$ref": "#/operations/<CreatorOperationId>/request",
+      "environment": {
+        "<creatorVar1>": "<value1>",
+        "<creatorVar2>": "<value2>"
+      },
       "responses": {
         "<successCode>": {
           "expectations": { "httpStatus": <successCode> },
@@ -494,6 +611,11 @@ each proposed chain in plain English before writing it.
 
 The `<varName>` captured from the creator's response is then referenced as
 `{{varName}}` in the target operation's `paths` or `queries` array.
+
+Before running Step 5, verify each Class-B `before` chain is self-contained:
+- every referenced creator input variable is resolved either in that step's
+  `environment` or globally (`environments.default.variables` / global `before`);
+- no creator input depends only on another scenario's `environment` block;
 
 ### Global `before` block
 
@@ -697,6 +819,23 @@ For every operation flagged as a BFLA candidate (privileged / admin-only),
 register it with a BFLA entry in `authorizationTests`. The scanner replaces
 the admin credential with the low-privilege credential on an otherwise
 identical execution of the operation's happy path.
+
+**Mandatory auth pinning for privileged operations:**
+Set the privileged operation's auth to the admin credential on the operation
+request definition itself. This ensures the baseline happy path executes as
+admin and the BFLA test is a true credential swap from admin to low-privilege.
+
+```json
+"<PrivilegedOperationId>": {
+  "operationId": "<PrivilegedOperationId>",
+  "request": {
+    "operationId": "<PrivilegedOperationId>",
+    "auth": ["<SchemeName>/AdminToken"],
+    "request": { ... }
+  },
+  ...
+}
+```
 
 **Step 1 — Define the authorization test (once, top-level):**
 
