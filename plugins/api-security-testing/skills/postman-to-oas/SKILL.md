@@ -64,9 +64,16 @@ If an environment file path was provided, read it and parse its `values` array
 into a flat map: `{ key: value }`. These environment values take precedence
 over collection-level variables when resolving `{{variableName}}` placeholders.
 
+Environment values are also a preferred source of concrete examples in the
+generated OAS when they map to request or response fields (for example:
+`userId`, `picture_id`, `token`, `baseUrl`).
+
 Build a merged variable map:
 1. Start with collection `variable[]` entries
 2. Overlay environment `values[]` entries (same key wins from environment)
+
+Build an example-value map from the same merged variables and use it when
+filling parameter and schema `example` fields.
 
 ---
 
@@ -138,6 +145,18 @@ Skip bodies that contain obvious attack payloads:
 - Path traversal: `../`, `..\`
 - Script tags or event handlers in JSON string values
 
+Skip attack-oriented requests entirely (do not emit them into `paths`):
+- Requests under folders named like `Attacks`, `Security Tests`, `Exploits`, `Abuse`, `Negative Tests`
+- Request names/descriptions that indicate exploit scenarios, for example:
+  `SQL Injection`, `NoSQL Injection`, `XSS`, `XXE`, `Path Traversal`,
+  `Log4Shell`, `Password Leakage`, `Privilege Escalation`, `BOLA`, `BFLA`,
+  `Un-authenticated Access`, `Invalid JSON`, `HTTP Verb Tampering`
+- Requests whose normalized path itself is attack-like (for example containing
+  traversal segments such as `../`)
+
+When in doubt, prefer excluding security test/demo requests from the OAS
+contract and note the exclusion in the conversion summary.
+
 ### Responses
 `item.response[]` — each saved response in Postman:
 - `status` → HTTP status code (integer)
@@ -146,8 +165,8 @@ Skip bodies that contain obvious attack payloads:
 - `body` → response body string; if parseable as JSON, parse it
 - `_postman_previewlanguage` → `json`, `html`, `text`, `xml`
 
-If a request has no saved responses, infer standard responses from the method
-(see Step 5).
+If a request has no saved responses, the operation gets no `responses` entries
+other than a placeholder `default` (see Step 7.5 — Response rules).
 
 ---
 
@@ -224,6 +243,8 @@ Analyze the parsed JSON object and infer a JSON Schema:
 - Mark a property as `required` if its value is non-null and non-empty
   (heuristic: present and non-null in the example → likely required)
 - Set `example` directly on each property schema using the Postman value
+- When a property value is a resolved placeholder from the environment,
+  preserve the resolved environment value as the `example`
 
 ### Form body → schema
 - Each form field becomes a `properties` entry with `type: string`
@@ -279,6 +300,8 @@ Every `{paramName}` segment in the normalized path must appear in `parameters`:
 Infer `type` from the example value (numeric string that is always digits →
 `type: integer`; UUID pattern → `type: string, format: uuid`).
 
+Prefer environment-derived values for path parameter examples when available.
+
 ### Query Parameters
 
 ```json
@@ -296,6 +319,9 @@ Infer `type` from the example value (numeric string that is always digits →
 
 Mark `required: true` only if the parameter appears in every saved request
 variant for this operation and has a non-empty value.
+
+When query values come from `{{variableName}}`, use the resolved environment
+value as the query parameter `example`.
 
 ### Header Parameters
 Only emit non-auth, non-standard request headers as `in: header` parameters.
@@ -396,15 +422,13 @@ For each (normalized path, method) operation:
 
 **Response rules:**
 - Include every saved Postman response as a separate status code entry
-- If no saved responses exist, infer standard responses:
-  - `GET` with path param: `200`, `401` (if authenticated), `404`, `500`
-  - `GET` without path param (list): `200`, `401` (if authenticated), `500`
-  - `POST`: `200` or `201`, `400`, `401` (if authenticated), `500`
-  - `PUT` / `PATCH`: `200`, `400`, `401` (if authenticated), `404`, `500`
-  - `DELETE`: `200` or `204`, `401` (if authenticated), `404`, `500`
-- Always add `401` to authenticated operations even if not in saved responses
-- Always add `400` to operations with a request body even if not in saved responses
-- A response with a body gets `content`; a response without (e.g. `204`) omits `content`
+- Only emit HTTP status codes that are explicitly saved in the Postman collection (`item.response[].code`)
+- If a request has no saved responses at all, emit a single `default` entry:
+  ```json
+  "default": { "description": "Unexpected error" }
+  ```
+- A saved response with a parseable body gets `content`; one with an empty
+  body omits `content` entirely (e.g. `204` or empty `text/plain` responses).
 
 **Security rules:**
 - If the collection has a global `auth` block, apply that scheme globally in
@@ -489,6 +513,7 @@ Requests processed:
   Operations generated:           <N>
   Requests merged (same path+method): <N>
   Requests skipped (attack payloads): <N>
+  Requests skipped (attack/demo operations): <N>
 
 Notes:
   - <any ambiguities, assumptions, or items that need manual review>
@@ -503,6 +528,9 @@ Notes:
 ### `{{variableName}}` placeholders
 - Resolve all `{{variableName}}` occurrences in URLs, headers, and body values
   using the merged variable map before any processing
+- For resolved placeholders, propagate the resolved value into generated OAS
+  `example` fields for path/query/header parameters and body schemas whenever
+  the placeholder maps to that field
 - If a variable cannot be resolved (not in collection or environment), leave
   the placeholder text as-is and note it in the summary
 - `{{baseUrl}}` in the URL path → strip from the path; emit as a server variable
@@ -511,6 +539,13 @@ Notes:
 ### Pre-request scripts and tests
 - Ignore Postman pre-request scripts and test scripts entirely — they are not
   part of the API contract
+
+### Security demo folders mixed with functional endpoints
+- Some collections include dedicated attack/demo folders alongside valid API
+  examples. Treat attack/demo requests as out-of-contract and exclude them from
+  the generated OAS.
+- Keep legitimate business operations even if they share the same endpoint as a
+  skipped attack variant; merge only non-skipped request variants.
 
 ### Collection-level / folder-level variables
 - Variables defined at the folder level apply only to requests in that folder
