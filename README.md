@@ -10,7 +10,7 @@ The official [42Crunch](https://www.42crunch.com) plugin marketplace for Claude 
 .claude-plugin/
   marketplace.json              # Plugin registry manifest
 plugins/                        # Claude plugins developed by 42Crunch
-  42crunch-api-security-testing/
+  api-security-testing/
     .claude-plugin/
       plugin.json               # Plugin metadata
     skills/                     # Skill definitions
