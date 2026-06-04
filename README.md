@@ -10,7 +10,7 @@ The official [42Crunch](https://www.42crunch.com) plugin marketplace for Claude 
 .claude-plugin/
   marketplace.json              # Plugin registry manifest
 plugins/                        # Claude plugins developed by 42Crunch
-  api-security-testing/
+  42crunch-api-security-testing/
     .claude-plugin/
       plugin.json               # Plugin metadata
     skills/                     # Skill definitions
@@ -39,7 +39,7 @@ Or from an interactive Claude Code session:
 
 ## Available Plugins
 
-### [api-security-testing](./plugins/api-security-testing/)
+### [42crunch-api-security-testing](./plugins/api-security-testing/)
 
 AI-powered API security plugin backed by 42Crunch. Audit OpenAPI specs, detect OWASP API Security vulnerabilities (including BOLA/BFLA), run live conformance and authorization scans against running APIs, and apply AI-assisted fixes — all through natural language.
 
@@ -47,13 +47,13 @@ AI-powered API security plugin backed by 42Crunch. Audit OpenAPI specs, detect O
 After registering the marketplace (see above), install the plugin:
 
 ```
-claude plugin install api-security-testing@42crunch-marketplace
+claude plugin install 42crunch-api-security-testing@42crunch-marketplace
 ```
 
 Or from an interactive Claude Code session:
 
 ```
-/plugin install api-security-testing@42crunch-marketplace
+/plugin install 42crunch-api-security-testing@42crunch-marketplace
 ```
 
 See the [plugin README](./plugins/api-security-testing/README.md) for full documentation.

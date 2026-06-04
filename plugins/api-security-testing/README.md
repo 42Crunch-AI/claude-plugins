@@ -4,7 +4,7 @@ Automate API security directly in Claude Code with 42Crunch - audit OpenAPI spec
 
 ## Overview
 
-The `api-security-testing` plugin is designed for AI-assisted development workflows, it provides continuous guardrails through an **audit->scan->remediate->validate** loop, ensuring APIs meet enterprise security standards before deployment.
+The `42crunch-api-security-testing` plugin is designed for AI-assisted development workflows, it provides continuous guardrails through an **audit->scan->remediate->validate** loop, ensuring APIs meet enterprise security standards before deployment.
 
 ## Commands
 
@@ -35,10 +35,10 @@ Add the 42Crunch marketplace:
 claude plugin marketplace add https://github.com/42Crunch-AI/claude-plugins
 ```
 
-Install the `api-security-testing` plugin:
+Install the `42crunch-api-security-testing` plugin:
 
 ```
-claude plugin install api-security-testing@42crunch-marketplace
+claude plugin install 42crunch-api-security-testing@42crunch-marketplace
 ```
 
 ## Quick Start
