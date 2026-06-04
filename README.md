@@ -25,17 +25,31 @@ The [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code/getting-sta
 
 ## Adding this Marketplace
 
-Register the 42Crunch marketplace with Claude Code once, then install the plugin from it:
+Register the 42Crunch marketplace with Claude Code:
+
+#### Using Claude Code CLI
 
 ```
 claude plugin marketplace add https://github.com/42Crunch-AI/claude-plugins
 ```
 
-Or from an interactive Claude Code session:
+#### Or Using an interactive Claude Code session
 
 ```
 /plugin marketplace add https://github.com/42Crunch-AI/claude-plugins
 ```
+
+#### Or Using Claude Code (for VSCode) plugin manager
+
+1. Type `/plugin` and press **Enter** to open the plugin manager:
+
+![Manage Plugins](docs/images/claude-manage-plugins.png)
+
+2. On the **Marketplaces** tab, paste the 42Crunch marketplace URL:
+  - `https://github.com/42Crunch-AI/claude-plugins`
+  - Click **Add** to add the marketplace
+
+![Add Marketplace](docs/images/claude-marketplace-add.png)
 
 ## Available Plugins
 
@@ -46,15 +60,33 @@ AI-powered API security plugin backed by 42Crunch. Audit OpenAPI specs, detect O
 **Install:**
 After registering the marketplace (see above), install the plugin:
 
+#### Using Claude Code CLI
+
 ```
 claude plugin install 42crunch-api-security-testing@42crunch-marketplace
 ```
 
-Or from an interactive Claude Code session:
+#### Or Using an interactive Claude Code session
 
 ```
 /plugin install 42crunch-api-security-testing@42crunch-marketplace
 ```
+
+#### Or Using Claude Code (for VSCode) plugin manager
+
+1. On the **Plugins** tab, search for the 42Crunch plugin:
+  - Type '42crunch' in the search bar
+  - Click **Install** on the `42crunch-api-security-testing` plugin
+
+![Plugin Search](docs/images/claude-plugin-search.png)
+
+2. Choose the **scope** of the plugin installation (User, Project, Local):
+
+![Plugin Install](docs/images/claude-plugin-install.png)
+
+3. Click **Restart** to apply the changes:
+
+![Plugin Restart](docs/images/claude-plugin-restart.png)
 
 See the [plugin README](./plugins/api-security-testing/README.md) for full documentation.
 
