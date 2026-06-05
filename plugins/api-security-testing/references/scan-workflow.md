@@ -34,9 +34,9 @@ Walk upward from `GIT_ROOT` looking for `.42c/conf.yaml`.
 - Extract the `alias` value for that path.
 
 **If `.42c/conf.yaml` does not exist or the OAS path is not in it:**
-- Derive an alias from the OAS filename: lowercase the stem, replace spaces/underscores with hyphens.
-  - Example: `openAPI.json` → `openapi`, `my_banking_api.json` → `my-banking-api`
-  - Or use `info.title` from the OAS file slug if more descriptive.
+- Derive an alias from `info.title` in the OAS file: lowercase, replace spaces/underscores/special characters with hyphens, collapse consecutive hyphens, strip leading/trailing hyphens.
+  - Example: `info.title: "My Banking API"` → `my-banking-api`, `info.title: "Vulnerable API v2"` → `vulnerable-api-v2`
+  - If `info.title` is absent or empty, fall back to the OAS filename stem using the same transformation rules.
 - Add (or create) the entry in `$GIT_ROOT/.42c/conf.yaml`:
   ```yaml
   apis:
