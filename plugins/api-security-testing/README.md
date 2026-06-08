@@ -49,6 +49,16 @@ claude plugin install 42crunch-api-security-testing@42crunch-marketplace
 4. **Fix issues** — Claude presents findings by severity and asks your consent before changing anything
 5. **Scan your API** — say: *"run a conformance scan"* against your running server
 
+## Common Scenarios
+
+See [RECIPES.md](./RECIPES.md) for step-by-step guides covering the most common workflows, including:
+
+- Running a **fix-only audit** from an existing report (skip re-running the audit)
+- **Review-only mode** — see findings without applying any fixes
+- **Full pipeline** (audit + scan) in a single session
+- **Scan only** when the audit is already passing
+- **Generating an OAS** from source code, then auditing it immediately
+
 ## Skills
 
 ### `42crunch-setup`

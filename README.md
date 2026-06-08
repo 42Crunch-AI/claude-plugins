@@ -90,7 +90,7 @@ claude plugin install 42crunch-api-security-testing@42crunch-marketplace
 
 ![Plugin Restart](docs/images/claude-plugin-restart.png)
 
-See the [plugin README](./plugins/api-security-testing/README.md) for full documentation.
+See the [plugin README](./plugins/api-security-testing/README.md) for full documentation and [RECIPES.md](./plugins/api-security-testing/RECIPES.md) for common scenario guides.
 
 
 ## Links
