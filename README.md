@@ -9,6 +9,8 @@ The official [42Crunch](https://www.42crunch.com) plugin marketplace for Claude 
 ```
 .claude-plugin/
   marketplace.json              # Plugin registry manifest
+docs/                           # Repository-level documentation assets
+  images/                       # Screenshots and diagrams used in READMEs
 plugins/                        # Claude plugins developed by 42Crunch
   api-security-testing/
     .claude-plugin/
