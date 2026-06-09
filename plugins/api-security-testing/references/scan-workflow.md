@@ -538,8 +538,8 @@ DeleteAccount          | D      | no    | register+login throwaway → delete th
 
 **`BOLA? = yes` has a direct consequence in Step 4:** every operation marked as a BOLA candidate will receive an additional BOLA test scenario (using User 2's token) alongside its happy path scenario. Every operation marked as a BFLA candidate must run its happy path as admin (`auth: ["<SchemeName>/AdminToken"]`) and will receive a BFLA test scenario that replays the same request with User 1's low-privilege token.
 
-Call `AskUserQuestion`:
-- **question**: `"Here is the proposed operation classification (shown above). Does this look correct, or do you need to correct any misclassifications?"`
+Output the classification explanation and table above as a chat message, then call `AskUserQuestion`:
+- **question**: `"Does this classification look correct, or do you need to correct any misclassifications?"`
 - **options**: `["Yes — proceed", "No — I need to correct some classifications"]`
 
 ---

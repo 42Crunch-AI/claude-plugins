@@ -42,9 +42,6 @@ running `42crunch-audit` first.
      - If **No** → ask the user to provide the URL and store it as `SCAN_TARGET_URL`.
      - If **Yes** → store `servers[0].url` as `SCAN_TARGET_URL`.
 
-   **Reachability check** — read `../../references/reachability-check.md` and run
-   the two-stage probe now. Return here once it completes (or stop if the user cancels).
-
 3. **OAS analysis for scan preview** — run silently before asking permission.
 
    Read the OAS file and collect:
@@ -53,22 +50,30 @@ running `42crunch-audit` first.
    - BOLA candidate count: operations where the path has `{…Id}`, `{…Key}`, `{…Ref}`, or similar resource-ID placeholders AND the method is GET, PUT, PATCH, or DELETE
    - Whether the OAS contains sample data: any operation with `example`, `examples`, or `default` values on its request body or parameter schemas
 
-4. **Ask for permission to configure the scan.** Call `AskUserQuestion`:
-   - **question**: (show the scan preview first, then ask)
-     ```
-     Ready to configure the scan?
-       Target:   <SCAN_TARGET_URL>  ✓ reachable  /  ⚠ reachability unknown
-       OAS:      <filename>  (<N> operations)
-       Auth:     <scheme types>  [+  second user needed — <N> BOLA candidate(s)]
-       Samples:  OAS has sample data  /  No samples — you'll need to provide test data
-       Tag:      <category>:<tagname>           ← platform mode only, when a tag is assigned; omit if no tag
-       Mode:     Platform / Free Trial
-     ```
-     `"I'm ready to start configuring the scan. I'll ask for credentials, classify your operations, and set up test scenarios — then run a happy path validation before the full scan. Shall I proceed?"`
+4. **Ask for permission to configure the scan.** Output the following scan
+   preview as a chat message first:
+
+   ```
+   Ready to configure the scan?
+     Target:   <SCAN_TARGET_URL>
+     OAS:      <filename>  (<N> operations)
+     Auth:     <scheme types>  [+  second user needed — <N> BOLA candidate(s)]
+     Samples:  OAS has sample data  /  No samples — you'll need to provide test data
+     Tag:      <category>:<tagname>           ← platform mode only, when a tag is assigned; omit if no tag
+     Mode:     Platform / Free Trial
+   ```
+
+   Then call `AskUserQuestion`:
+   - **question**: `"I'm ready to start configuring the scan. I'll ask for credentials, classify your operations, and set up test scenarios — then run a happy path validation before the full scan. Shall I proceed?"`
    - **options**: `["Yes, let's configure", "No, cancel"]`
 
 5. **Execute the Scan.** Mode is already resolved from pre-flight — do not
-   re-derive it. Read `../../references/scan-workflow.md` and apply only the
+   re-derive it.
+
+   **Reachability check** — read `../../references/reachability-check.md` and run
+   the two-stage probe now. Return here once it completes (or stop if the user cancels).
+
+   Read `../../references/scan-workflow.md` and apply only the
    commands for the identified mode throughout.
    The workflow sets up the scan config, collects credentials, gathers test data,
    classifies operations, validates happy paths, then asks for permission again
