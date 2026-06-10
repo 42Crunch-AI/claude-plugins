@@ -1106,9 +1106,13 @@ import json, re
 raw = open("/tmp/42c-scan-out.json").read()
 match = re.search(r'\{[\s\S]*\}', raw)
 if not match:
-    print("No JSON found in scan output"); exit(0)
+  print("No JSON found in scan output")
+  raise SystemExit(0)
 
 data = json.loads(match.group())
+report = data.get("report", {})
+summary = report.get("summary", {})
+
 sqg = "PASSED" if data.get("sqgPass") else ("FAILED" if "sqgPass" in data else "N/A")
 print(f"sqgPass: {sqg}")
 for d in data.get("sqgDetails", []):
@@ -1116,19 +1120,64 @@ for d in data.get("sqgDetails", []):
     if rules:
         print(f"blockingRules[{len(rules)}]: {', '.join(rules)}")
 
-# Failing test results (structure varies by CLI version)
-results = data.get("results", data.get("scanResults", []))
-if isinstance(results, dict):
-    results = [results]
-failures = [
-    (r.get("operationId", r.get("path", "?")), t.get("testKey", "?"), t.get("severity", ""))
-    for r in results
-    for t in r.get("testResults", [])
-    if t.get("status") == "fail"
-]
+auth_summary = (((summary.get("authorizationTestRequests") or {}).get("executed") or {}).get("total"))
+issue_summary = (((summary.get("issues") or {}).get("total")))
+if auth_summary is not None:
+  print(f"authorizationRequests: {auth_summary}")
+if issue_summary is not None:
+  print(f"issuesTotal: {issue_summary}")
+
+def severity_from_criticality(value):
+  mapping = {
+    5: "critical",
+    4: "high",
+    3: "medium",
+    2: "low",
+    1: "info",
+    0: "info",
+  }
+  return mapping.get(value, "")
+
+failures = []
+operations = report.get("operations") or {}
+if isinstance(operations, dict):
+  for operation_id, operation in operations.items():
+    for section_name in ("authorizationRequestsResults", "conformanceRequestsResults", "customRequestsResults"):
+      for entry in operation.get(section_name, []) or []:
+        outcome = entry.get("outcome") or {}
+        if outcome.get("testSuccessful") is True:
+          continue
+        test = entry.get("test") or {}
+        severity = severity_from_criticality(outcome.get("criticality"))
+        failures.append((
+          operation_id,
+          test.get("key", "?"),
+          severity,
+        ))
+
+if not failures:
+  legacy_results = data.get("results", data.get("scanResults", []))
+  if isinstance(legacy_results, dict):
+    legacy_results = [legacy_results]
+  for result in legacy_results:
+    for test_result in result.get("testResults", []):
+      if test_result.get("status") == "fail":
+        failures.append((
+          result.get("operationId", result.get("path", "?")),
+          test_result.get("testKey", "?"),
+          test_result.get("severity", ""),
+        ))
+
 if failures:
-    print(f"\nfailures[{len(failures)}]{{operation,test,severity}}:")
-    for op, test, sev in failures:
+  unique_failures = []
+  seen = set()
+  for failure in failures:
+    if failure in seen:
+      continue
+    seen.add(failure)
+    unique_failures.append(failure)
+  print(f"\nfailures[{len(unique_failures)}]{{operation,test,severity}}:")
+  for op, test, sev in unique_failures:
         print(f"  {op},{test},{sev}")
 else:
     print("failures: none")
@@ -1141,6 +1190,8 @@ $raw = Get-Content "$env:TEMP\42c-scan-out.json" -Raw
 $jsonMatch = [regex]::Match($raw, '\{[\s\S]*\}')
 if (-not $jsonMatch.Success) { Write-Host "No JSON found in scan output"; exit }
 $data = $jsonMatch.Value | ConvertFrom-Json
+$report = if ($data.report) { $data.report } else { $null }
+$summary = if ($report -and $report.summary) { $report.summary } else { $null }
 $sqg = if ($null -ne $data.sqgPass) { if ($data.sqgPass) { 'PASSED' } else { 'FAILED' } } else { 'N/A' }
 Write-Host "sqgPass: $sqg"
 foreach ($d in $data.sqgDetails) {
@@ -1148,9 +1199,45 @@ foreach ($d in $data.sqgDetails) {
         Write-Host "blockingRules[$($d.blockingRules.Count)]: $($d.blockingRules -join ', ')"
     }
 }
+if ($summary -and $summary.authorizationTestRequests -and $summary.authorizationTestRequests.executed) {
+  Write-Host "authorizationRequests: $($summary.authorizationTestRequests.executed.total)"
+}
+if ($summary -and $summary.issues) {
+  Write-Host "issuesTotal: $($summary.issues.total)"
+}
+
+function Get-SeverityFromCriticality {
+  param([int]$criticality)
+  switch ($criticality) {
+    5 { 'critical' }
+    4 { 'high' }
+    3 { 'medium' }
+    2 { 'low' }
+    default { 'info' }
+  }
+}
+
+$failures = @()
+if ($report -and $report.operations) {
+  $report.operations.PSObject.Properties | ForEach-Object {
+    $opName = $_.Name
+    $op = $_.Value
+    foreach ($sectionName in @('authorizationRequestsResults', 'conformanceRequestsResults', 'customRequestsResults')) {
+      $entries = $op.$sectionName
+      if (-not $entries) { continue }
+      foreach ($entry in $entries) {
+        if ($entry.outcome -and $entry.outcome.testSuccessful -eq $true) { continue }
+        $testKey = if ($entry.test -and $entry.test.key) { $entry.test.key } else { '?' }
+        $severity = if ($entry.outcome) { Get-SeverityFromCriticality([int]$entry.outcome.criticality) } else { '' }
+        $failures += "$opName,$testKey,$severity"
+      }
+    }
+  }
+}
+
+if ($failures.Count -eq 0) {
 $results = if ($data.results) { $data.results } elseif ($data.scanResults) { $data.scanResults } else { @() }
 if ($results -is [PSCustomObject]) { $results = @($results) }
-$failures = @()
 foreach ($r in $results) {
     foreach ($t in $r.testResults) {
         if ($t.status -eq 'fail') {
@@ -1161,6 +1248,9 @@ foreach ($r in $results) {
         }
     }
 }
+}
+
+$failures = $failures | Select-Object -Unique
 if ($failures.Count -gt 0) {
     Write-Host "`nfailures[$($failures.Count)]{operation,test,severity}:"
     foreach ($f in $failures) { Write-Host "  $f" }
