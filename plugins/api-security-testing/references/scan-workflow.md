@@ -437,6 +437,11 @@ Before writing any scenario into the scan config, analyse every operation in
 the OAS and classify it. Before presenting the table, give the user a brief
 explanation of the four classes so they can meaningfully validate the results.
 
+This step is mandatory and visible: do not treat the classification as an
+internal inference. Show a complete operation-by-operation table, including the
+proposed data source or dependency chain for every operation, and wait for an
+explicit user confirmation before writing any scan config changes.
+
 ### Classification overview
 
 Output this explanation before the table:
@@ -551,6 +556,12 @@ along-side the `happy.path` scenario. The `before` step creates or fetches the
 resource, while the `happy.path` step executes the target request. Show the user
 each proposed chain in plain English before writing it.
 
+Do not consider a Class-B operation fully configured unless the resulting scan
+config contains a `before` block that seeds the resource or extracts the
+required identifier. A BOLA authorization test alone is not a substitute for a
+dependency chain, and a static placeholder path value is not sufficient when a
+resource must be created or resolved first.
+
 #### `before` block rules:
 1. Always prefer to reference existing OAS operations in `before` blocks — avoid creating
 a utility request as a substitute. If an operation already exists in the spec
@@ -608,6 +619,10 @@ scenario.
   ]
 }
 ```
+
+If no existing operation can reliably create or return the needed resource ID,
+stop and ask the user for the missing seed data or an alternate creator
+operation.
 
 The `<varName>` captured from the creator's response is then referenced as
 `{{varName}}` in the target operation's `paths` or `queries` array.
@@ -1307,6 +1322,11 @@ Then ask which (if any) findings the user wants to address.
 Before touching anything, display the full scan picture grouped into three tiers.
 Use plain-English descriptions — do not surface raw test keys or scan-report field names.
 
+Mandatory behavior:
+- The next user-visible output after Step 6 / 6.5 MUST be the full Step 7a report in the three-tier structure below.
+- A short prose summary, condensed recap, or partial listing does NOT satisfy 7a.
+- Render all three tiers every time, even when one or more tiers are `(none)`.
+
 **Platform mode header:**
 ```
 Scan Results  |  SQG (<sqg-name>): PASSED / FAILED
@@ -1365,6 +1385,14 @@ If any BFLA finding was confirmed, add:
 
 ### 7b — Determine fix candidates
 
+Mandatory behavior:
+- Derive fix candidates only from the fully rendered Step 7a report and the blocking rules in `sqgDetails`.
+- Before calling 7c, explicitly assemble the candidate lists that will be referenced in the consent prompt:
+  - `authorization_fix_candidates`
+  - `sqg_blocking_conformance_fix_candidates` (platform mode only)
+  - `informational_conformance_findings`
+- If a tier is empty, say so explicitly; do not silently omit it.
+
 **Platform mode:**
 1. All **authorization failures** (BOLA/BFLA confirmed) → always a fix candidate.
 2. **Conformance findings matched in `sqgDetails[].blockingRules`** → fix candidate
@@ -1378,6 +1406,12 @@ If any BFLA finding was confirmed, add:
    informational. Surface them to the user and ask which (if any) they want to fix.
 
 ### 7c — Consent Gate
+
+Mandatory behavior:
+- The very next action after completing 7b MUST be the `AskUserQuestion` call defined in this section for the active mode.
+- Do not apply fixes, show diffs, or ask for approval on any individual fix before this gate returns.
+- If the user chooses `Show me the diff first`, stay in Step 7c until each proposed change is shown and individually approved or skipped.
+- If the user chooses `No`, stop remediation and proceed only with summary/reporting.
 
 **Platform mode** — call `AskUserQuestion`:
 - **question**: `"Here is the complete scan report (shown above). I can apply the following fixes to <filename>: 🔴 Authorization fixes: [list] 🟠 SQG-blocking conformance fixes: [list]. The 🟡 informational findings are not SQG-blocking and will not be fixed automatically — let me know if you'd like to address any of them too. What would you like to do?"`
@@ -1462,6 +1496,42 @@ After all code fixes are applied or skipped, append to the final output:
   Skipped: <k> issue(s) (user declined or handler not found)
 ─────────────────────────────────────────────────────────────────────────
 ```
+
+### 7f — Permission Gate Before Verification Scan
+
+After Step 7e is complete (all server-side fixes applied or skipped), ask the
+user whether they want to run the final verification scan before the final
+scan summary is presented.
+
+Call `AskUserQuestion`:
+- **question**: `"Would you like me to run a final verification scan after the code fixes?"`
+- **options**: `["Yes — run the verification scan", "No — skip it and continue to the final scan summary"]`
+
+If the user selects **No**:
+- Continue directly to the final scan summary output.
+
+If the user selects **Yes**:
+- Continue to Step 7g.
+
+### 7g — Optional API Restart Before Verification Scan
+
+Ask whether the API needs to be restarted for the code fixes to take effect.
+
+Call `AskUserQuestion`:
+- **question**: `"Do you need to restart the API for the code fixes to take effect?"`
+- **options**: `["No — run the scan now", "Yes — I need to restart it first"]`
+
+If the user selects **No**:
+- Run the verification scan using the Step 6 command for the active mode, then continue to the final scan summary output.
+
+If the user selects **Yes**:
+- Ask a follow-up question:
+  - **question**: `"Have you restarted the API?"`
+  - **options**: `["Yes — run the scan now", "No — not yet"]`
+- If the user selects **Yes**:
+  - Run the verification scan using the Step 6 command for the active mode, then continue to the final scan summary output.
+- If the user selects **No**:
+  - Wait for the API to be restarted, then ask the same question again.
 
 ---
 
