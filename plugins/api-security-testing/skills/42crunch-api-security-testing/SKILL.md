@@ -84,11 +84,14 @@ explicit user permission before execution.
 
    Read `../../references/scan-workflow.md` and apply only
    the commands for the identified mode throughout.
-   The workflow runs the scan, then presents a **risk-classified findings
-   report** (Authorization failures / SQG-blocking conformance /
-   informational conformance). Fix candidates are determined by SQG-blocking
-   rules and authorization failures — not severity alone. The skill pauses and
-   asks the user to consent before applying any OAS changes.
+   The workflow sets up the scan config, collects credentials, gathers test data,
+   shows a complete operation-by-operation classification table, validates happy paths,
+   then asks for permission again before running the full scan. It presents a **risk-classified findings report**
+   (Authorization failures / SQG-blocking conformance / informational conformance).
+   Fix candidates are determined by SQG-blocking rules and authorization failures — not severity alone.
+   The skill pauses and asks the user to consent before applying any OAS changes or server-side code fixes.
+   Optionally prompt user to restart the API after server-side code fixes are applied,
+   or skipped, before the final scan summary.
 
   **Mandatory checkpoint:** during Phase 2, after any direct edit to
   `CONF_FILE` (including `environments.default.variables.*`, auth wiring, or

@@ -163,4 +163,4 @@ off.
 |-----------------|----------------------------------|-----------------|
 | `API_KEY`       | *(required)*                     | Platform        |
 | `PLATFORM_HOST` | *(set during setup)*             | Platform only   |
-| `TRIAL_TOKEN`.  | *(required)*                     | Free Trial      |
+| `TRIAL_TOKEN`   | *(required)*                     | Free Trial      |

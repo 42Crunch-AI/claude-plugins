@@ -24,8 +24,9 @@ the source code. No existing OAS file is required.
    default to the current working directory. If a specific service subdirectory
    is open in the editor, use that.
 
-2. **Detect the language and framework.** Scan for indicators without opening
-   every file yet:
+2. **Detect the language and framework.** Scan for indicators before opening
+   implementation files, and only open files needed to confirm the framework and
+   build the resulting OAS:
    - `package.json` → Node.js. Check `dependencies` for `express`, `fastify`,
      `koa`, `hapi`, `nestjs`, `@nestjs/core`.
    - `requirements.txt` / `pyproject.toml` / `setup.py` → Python. Check for
@@ -64,7 +65,8 @@ patterns matched to the detected framework:
 | **Rails** | `config/routes.rb` |
 | **Sinatra/Grape** | Files with `get '/'`, `post '/'`, `resource :name` |
 
-Read every discovered route file in full. For each route, record:
+Read only the discovered route files that are needed to enumerate endpoints and
+supporting metadata. For each route, record:
 - HTTP method (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`)
 - Path string (convert framework-specific syntax to OAS path syntax:
   `:param` → `{param}`, `<param>` → `{param}`, `{param:int}` → `{param}`)
@@ -75,7 +77,8 @@ Read every discovered route file in full. For each route, record:
 
 ## Step 2 — Extract Operation Details from Handlers
 
-For each route handler identified in Step 1, read the handler implementation.
+For each route handler identified in Step 1, read only the handler
+implementation sections needed to extract the API contract.
 Extract:
 
 ### Path Parameters

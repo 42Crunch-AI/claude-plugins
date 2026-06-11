@@ -76,10 +76,13 @@ running `42crunch-audit` first.
    Read `../../references/scan-workflow.md` and apply only the
    commands for the identified mode throughout.
    The workflow sets up the scan config, collects credentials, gathers test data,
-   classifies operations, validates happy paths, then asks for permission again
-   before running the full scan. It presents a **risk-classified findings report**
-   (Authorization failures / SQG-blocking conformance / informational conformance)
-   and pauses for consent before applying any OAS changes.
+   shows a complete operation-by-operation classification table, validates happy paths,
+   then asks for permission again before running the full scan. It presents a **risk-classified findings report**
+   (Authorization failures / SQG-blocking conformance / informational conformance).
+   Fix candidates are determined by SQG-blocking rules and authorization failures — not severity alone.
+   The skill pauses and asks the user to consent before applying any OAS changes or server-side code fixes.
+   Optionally prompt user to restart the API after server-side code fixes are applied,
+   or skipped, before the final scan summary.
 
   **Mandatory checkpoint:** after any direct edit to `CONF_FILE` (including
   `environments.default.variables.*`, auth wiring, or scenario chains), run

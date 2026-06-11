@@ -85,4 +85,3 @@ The `Score change:` row is produced from the delta values computed in Step 4 of
 declined at the consent gate, or there were no SQG-blocking issues).
 
 If the user declined to apply fixes, note that instead.
-
