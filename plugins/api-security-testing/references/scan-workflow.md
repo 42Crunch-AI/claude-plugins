@@ -289,9 +289,9 @@ available in the operation context at scan time. Any extra variables captured he
 **Rule:** capture only the credential (for example Bearer token, API key, or Basic Auth) 
 in `authenticationDetails`. For any other data needed from the login response, 
 add an explicit `before` block on each operation that needs it and capture the value
-there instead (See Step 4 — Class-B: dependency chain pattern).
+there instead (See Step 6 — Class-B: dependency chain pattern).
   - If many operations share the same variable, use the global 
-    before block (see Step 4 — Global `before` block). Do not rely on
+    before block (see Step 6 — Global `before` block). Do not rely on
     variableAssignments in `authenticationDetails` for anything beyond the
     credential token itself.
 
@@ -336,7 +336,7 @@ template variables first — otherwise `environment` overrides have no effect.
 
 ---
 
-## Step 2.5 — Test Data
+## Step 3 — Test Data
 
 Before classifying operations, establish the source of test data for the scan.
 
@@ -361,17 +361,17 @@ Call `AskUserQuestion`:
    { "<METHOD> <path>": { body: {...}, pathVars: {...}, queryParams: {...} } }
    ```
 4. Announce: `"Loaded test data from Postman collection: <N> request(s) matched."` 
-5. This table is used in Step 3 (classification) and Step 4 (scenario building) to
-   auto-populate Class-C operations — no reactive import needed in Step 5.
+5. This table is used in Step 5 (classification) and Step 6 (scenario building) to
+   auto-populate Class-C operations — no reactive import needed in Step 8.
 
-If re-seeding is needed after a destructive scan operation (Step 3 Class-D), use
+If re-seeding is needed after a destructive scan operation (Step 5 Class-D), use
 the seed command captured here. If no seed command was provided and Class-D
 operations exist, note to the user that they may need to manually restore test
 records between scan runs if the primary user's account is deleted.
 
 ---
 
-## Step 2.6 — Built-in Variables
+## Step 4 — Built-in Variables
 
 The scan config supports a set of built-in variables that generate dynamic values at scan runtime. These can be used in place of or concatenated with static string values for parameters and request body properties.
 
@@ -427,11 +427,11 @@ This keeps the operation reusable: a `before` block that calls `UserRegistration
 "createdAt": "{{$timestamp3339}}"
 ```
 
-Keep these available when classifying operations in Step 3 — Class-A operations that create uniquely-keyed resources (users, accounts, orders) should use built-in variables rather than static literals to avoid collision failures across scan iterations.
+Keep these available when classifying operations in Step 5 — Class-A operations that create uniquely-keyed resources (users, accounts, orders) should use built-in variables rather than static literals to avoid collision failures across scan iterations.
 
 ---
 
-## Step 3 — Operation Classification
+## Step 5 — Operation Classification
 
 Before writing any scenario into the scan config, analyse every operation in
 the OAS and classify it. Before presenting the table, give the user a brief
@@ -487,7 +487,7 @@ Detection heuristic:
 
 **C — User-data-required**
 Inputs cannot be resolved automatically and no plausible creator operation
-exists. If a Postman collection was provided in Step 2.5, use values from the
+exists. If a Postman collection was provided in Step 3, use values from the
 lookup table. Otherwise ask the user to provide the values directly.
 
 **D — Throwaway-user required**
@@ -541,7 +541,7 @@ DeleteUser             | B      | yes   | UserRegistration → /{userId}
 DeleteAccount          | D      | no    | register+login throwaway → delete throwaway
 ```
 
-**`BOLA? = yes` has a direct consequence in Step 4:** every operation marked as a BOLA candidate will receive an additional BOLA test scenario (using User 2's token) alongside its happy path scenario. Every operation marked as a BFLA candidate must run its happy path as admin (`auth: ["<SchemeName>/AdminToken"]`) and will receive a BFLA test scenario that replays the same request with User 1's low-privilege token.
+**`BOLA? = yes` has a direct consequence in Step 6:** every operation marked as a BOLA candidate will receive an additional BOLA test scenario (using User 2's token) alongside its happy path scenario. Every operation marked as a BFLA candidate must run its happy path as admin (`auth: ["<SchemeName>/AdminToken"]`) and will receive a BFLA test scenario that replays the same request with User 1's low-privilege token.
 
 Output the classification explanation and table above as a chat message, then call `AskUserQuestion`:
 - **question**: `"Does this classification look correct, or do you need to correct any misclassifications?"`
@@ -549,7 +549,7 @@ Output the classification explanation and table above as a chat message, then ca
 
 ---
 
-## Step 4 — Build Scenario Chains
+## Step 6 — Build Scenario Chains
 
 For every Class-B operation, inject an operation-level `before` dependency step
 along-side the `happy.path` scenario. The `before` step creates or fetches the
@@ -627,7 +627,7 @@ operation.
 The `<varName>` captured from the creator's response is then referenced as
 `{{varName}}` in the target operation's `paths` or `queries` array.
 
-Before running Step 5, verify each Class-B `before` chain is self-contained:
+Before running Step 8, verify each Class-B `before` chain is self-contained:
 - every referenced creator input variable is resolved either in that step's
   `environment` or globally (`environments.default.variables` / global `before`);
 - no creator input depends only on another scenario's `environment` block;
@@ -659,7 +659,7 @@ block rather than repeating it in every scenario:
 
 ### Class-C: user-provided data
 
-If a Postman collection was imported in Step 2.5, look up the operation in
+If a Postman collection was imported in Step 3, look up the operation in
 the test data table and inject the extracted values as static literals in the
 `paths` / `queries` / `requestBody.json` fields of the operation's `request`
 block. If the operation is not in the table, ask the user to paste the values.
@@ -794,7 +794,7 @@ clean slate.
 
 ### BOLA authorization test pattern (BOLA? = yes operations)
 
-For every operation marked `BOLA? = yes` in the Step 3 table, register it
+For every operation marked `BOLA? = yes` in the Step 5 table, register it
 with the top-level `authorizationTests` entry. The scanner replaces the
 source credential with the target credential on an otherwise identical
 execution of the operation's happy path — including any `before` blocks
@@ -877,9 +877,9 @@ admin and the BFLA test is a true credential swap from admin to low-privilege.
 No additional scenario block is needed. A 2xx response on the BFLA
 authorization test is a confirmed BFLA finding.
 
-## Step 4.5 — Scan Config Validation Checkpoint
+## Step 7 — Scan Config Validation Checkpoint
 
-After all Step 2 to Step 4 edits are complete (credentials, operation
+After all Step 2 to Step 6 edits are complete (credentials, operation
 classification, scenario chains, and authorization test wiring), validate
 `CONF_FILE` again before running happy-path validation.
 
@@ -896,14 +896,14 @@ API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf validate <relative-
 ```
 
 Validation result handling:
-- `statusCode: 0` → continue to Step 5.
+- `statusCode: 0` → continue to Step 8.
 - Any non-zero status or schema errors (for example `unknown env from` paths)
   → fix config shape and re-run this checkpoint.
-- Do not run Step 5 until this checkpoint passes.
+- Do not run Step 8 until this checkpoint passes.
 
 ---
 
-## Step 5 — Happy Path Validation Run
+## Step 8 — Happy Path Validation Run
 
 Before running the full scan, validate all happy paths in strict mode.
 
@@ -1021,7 +1021,7 @@ the full failure table first, then resolve one root cause type at a time.
 ### Postman collection fallback
 
 If an operation still fails with HTTP 400/422 after checking the already-loaded
-Step 2.5 lookup table (or no collection was provided), ask the user to supply
+Step 3 lookup table (or no collection was provided), ask the user to supply
 the values manually. Do not ask for a new Postman collection — if a collection
 was already imported, re-examine the existing lookup table entries for the
 failing operation before requesting manual input.
@@ -1066,7 +1066,7 @@ Once all happy paths pass, set `happyPathOnly: false` before the full scan:
 
 ---
 
-## Step 5.5 — Permission Gate Before Full Scan
+## Step 9 — Permission Gate Before Full Scan
 
 All happy paths have passed. Before running the full security scan, ask the
 user for explicit consent. Call `AskUserQuestion`:
@@ -1074,11 +1074,11 @@ user for explicit consent. Call `AskUserQuestion`:
 - **question**: `"All happy paths passed successfully. I'm ready to run the full security scan against <SCAN_TARGET_URL>. This will execute authorization tests (BOLA/BFLA) and conformance fuzzing across all <N> operations. Shall I proceed?"`
 - **options**: `["Yes — run the full scan", "No — stop here"]`
 
-Only proceed to Step 6 after explicit confirmation.
+Only proceed to Step 10 after explicit confirmation.
 
 ---
 
-## Step 6 — Full Scan
+## Step 10 — Full Scan
 
 Run the full scan, capturing output to a temp file for extraction:
 
@@ -1274,10 +1274,10 @@ if ($failures.Count -gt 0) {
 }
 ```
 
-Use only the TOON output above when rendering Step 7. Do not load or display
+Use only the TOON output above when rendering Step 12. Do not load or display
 the raw scan output file content.
 
-## Step 6.5 — Database Reset Reminder (After Full Scan)
+## Step 11 — Database Reset Reminder (After Full Scan)
 
 The full scan (conformance fuzzing and authorization tests) has now completed.
 It may have made malformed requests, cross-user resource accesses (BOLA/BFLA),
@@ -1292,7 +1292,7 @@ and confirm when ready."`, then call a second `AskUserQuestion`:
 - **question**: `"Database reset complete?"`
 - **options**: `["Yes — ready to review results"]`
 
-Then proceed to Step 7.
+Then proceed to Step 12.
 
 ---
 
@@ -1315,16 +1315,16 @@ Then ask which (if any) findings the user wants to address.
 
 ---
 
-## Step 7 — Display Results and Apply Fixes
+## Step 12 — Display Results and Apply Fixes
 
-### 7a — Render the risk-classified findings report
+### 12a — Render the risk-classified findings report
 
 Before touching anything, display the full scan picture grouped into three tiers.
 Use plain-English descriptions — do not surface raw test keys or scan-report field names.
 
 Mandatory behavior:
-- The next user-visible output after Step 6 / 6.5 MUST be the full Step 7a report in the three-tier structure below.
-- A short prose summary, condensed recap, or partial listing does NOT satisfy 7a.
+- The next user-visible output after Step 10 / 11 MUST be the full Step 12a report in the three-tier structure below.
+- A short prose summary, condensed recap, or partial listing does NOT satisfy 12a.
 - Render all three tiers every time, even when one or more tiers are `(none)`.
 
 **Platform mode header:**
@@ -1383,11 +1383,11 @@ If any BFLA finding was confirmed, add:
 
 ---
 
-### 7b — Determine fix candidates
+### 12b — Determine fix candidates
 
 Mandatory behavior:
-- Derive fix candidates only from the fully rendered Step 7a report and the blocking rules in `sqgDetails`.
-- Before calling 7c, explicitly assemble the candidate lists that will be referenced in the consent prompt:
+- Derive fix candidates only from the fully rendered Step 12a report and the blocking rules in `sqgDetails`.
+- Before calling 12c, explicitly assemble the candidate lists that will be referenced in the consent prompt:
   - `authorization_fix_candidates`
   - `sqg_blocking_conformance_fix_candidates` (platform mode only)
   - `informational_conformance_findings`
@@ -1405,12 +1405,12 @@ Mandatory behavior:
 2. There are no SQG-blocking conformance findings — all conformance findings are
    informational. Surface them to the user and ask which (if any) they want to fix.
 
-### 7c — Consent Gate
+### 12c — Consent Gate
 
 Mandatory behavior:
-- The very next action after completing 7b MUST be the `AskUserQuestion` call defined in this section for the active mode.
+- The very next action after completing 12b MUST be the `AskUserQuestion` call defined in this section for the active mode.
 - Do not apply fixes, show diffs, or ask for approval on any individual fix before this gate returns.
-- If the user chooses `Show me the diff first`, stay in Step 7c until each proposed change is shown and individually approved or skipped.
+- If the user chooses `Show me the diff first`, stay in Step 12c until each proposed change is shown and individually approved or skipped.
 - If the user chooses `No`, stop remediation and proceed only with summary/reporting.
 
 **Platform mode** — call `AskUserQuestion`:
@@ -1429,7 +1429,7 @@ Only advance to the next fix after the user confirms the current one.
 
 Only apply fixes after explicit user confirmation.
 
-### 7d — Apply fixes
+### 12d — Apply fixes
 
 | Finding type | Fix action |
 |---|---|
@@ -1437,27 +1437,27 @@ Only apply fixes after explicit user confirmation.
 | SQG-blocking conformance | Correct response schemas, required fields, or parameter definitions to align the OAS with actual API behaviour |
 | Non-SQG-blocking conformance (any severity) | Surface only; ask user if they want to address them |
 
-### 7e — Server-side / Implementation Fixes
+### 12e — Server-side / Implementation Fixes
 
-OAS fixes document the contract but do not secure the API. Every SQG-blocking finding has a root cause in the server-side code. After 7d, continue to 7e to locate and fix the implementation.
+OAS fixes document the contract but do not secure the API. Every SQG-blocking finding has a root cause in the server-side code. After 12d, continue to 12e to locate and fix the implementation.
 
-#### 7e-1 — Gate
+#### 12e-1 — Gate
 
-Trigger 7e for every confirmed finding that is SQG-blocking:
+Trigger 12e for every confirmed finding that is SQG-blocking:
 - 🔴 Authorization failures (BOLA / BFLA confirmed)
 - 🟠 Conformance findings matched in `sqgDetails[].blockingRules`
 
-Skip 7e entirely only when the scan has zero SQG-blocking findings.
+Skip 12e entirely only when the scan has zero SQG-blocking findings.
 
-#### 7e-2 — Consent gate for code fixes
+#### 12e-2 — Consent gate for code fixes
 
 Call `AskUserQuestion`:
 - **question**: `"The OAS has been updated. The following SQG-blocking issues also require server-side code fixes — the API implementation is the root cause. Should I locate and fix the code? <list all SQG-blocking findings by operation>"`
 - **options**: `["Yes — find and fix the code", "Show me the relevant code first", "No — skip code fixes"]`
 
-If **"Show me the relevant code first"** is chosen, locate each handler (step 7e-3) and display the relevant code block without making any changes, then call `AskUserQuestion` again with the same options to proceed.
+If **"Show me the relevant code first"** is chosen, locate each handler (step 12e-3) and display the relevant code block without making any changes, then call `AskUserQuestion` again with the same options to proceed.
 
-#### 7e-3 — Locate route handlers
+#### 12e-3 — Locate route handlers
 
 For each SQG-blocking finding:
 
@@ -1467,7 +1467,7 @@ For each SQG-blocking finding:
 4. Report: `"Found handler for <METHOD> <path> in <file>:<line>."`
 5. If no handler is found after the widened search, report it as not found and skip the fix for that operation — do not block the remaining fixes.
 
-#### 7e-4 — Apply fix by finding type
+#### 12e-4 — Apply fix by finding type
 
 | Finding type | Root cause to look for in the code | Server-side fix |
 |---|---|---|
@@ -1479,14 +1479,14 @@ For each SQG-blocking finding:
 | **Conformance — wrong or missing Content-Type / headers** | Handler does not set the `Content-Type` or other response headers required by the OAS | Add the required headers to the response |
 | **Conformance — schema type/format mismatch** | Handler returns a field with a different type or format than declared (e.g., returns a string where the OAS declares integer) | Coerce or cast the field to the declared type/format in the serializer or handler |
 
-#### 7e-5 — Diff and confirm before writing
+#### 12e-5 — Diff and confirm before writing
 
 For each proposed code change, display it in unified diff format and call `AskUserQuestion`:
 - **question**: `"Apply this fix to <file>?"` — **options**: `["Yes", "No — skip this one"]`
 
 Only write the change after explicit confirmation. Advance to the next finding only after the current one is confirmed or skipped.
 
-#### 7e-6 — Summary
+#### 12e-6 — Summary
 
 After all code fixes are applied or skipped, append to the final output:
 
@@ -1497,9 +1497,9 @@ After all code fixes are applied or skipped, append to the final output:
 ─────────────────────────────────────────────────────────────────────────
 ```
 
-### 7f — Permission Gate Before Verification Scan
+### 12f — Permission Gate Before Verification Scan
 
-After Step 7e is complete (all server-side fixes applied or skipped), ask the
+After Step 12e is complete (all server-side fixes applied or skipped), ask the
 user whether they want to run the final verification scan before the final
 scan summary is presented.
 
@@ -1511,9 +1511,9 @@ If the user selects **No**:
 - Continue directly to the final scan summary output.
 
 If the user selects **Yes**:
-- Continue to Step 7g.
+- Continue to Step 12g.
 
-### 7g — Optional API Restart Before Verification Scan
+### 12g — Optional API Restart Before Verification Scan
 
 Ask whether the API needs to be restarted for the code fixes to take effect.
 
@@ -1522,16 +1522,40 @@ Call `AskUserQuestion`:
 - **options**: `["No — run the scan now", "Yes — I need to restart it first"]`
 
 If the user selects **No**:
-- Run the verification scan using the Step 6 command for the active mode, then continue to the final scan summary output.
+- Run the verification scan using the Step 10 command for the active mode, then continue to Step 12h.
 
 If the user selects **Yes**:
 - Ask a follow-up question:
   - **question**: `"Have you restarted the API?"`
   - **options**: `["Yes — run the scan now", "No — not yet"]`
 - If the user selects **Yes**:
-  - Run the verification scan using the Step 6 command for the active mode, then continue to the final scan summary output.
+  - Run the verification scan using the Step 10 command for the active mode, then continue to Step 12h.
 - If the user selects **No**:
   - Wait for the API to be restarted, then ask the same question again.
+
+### 12h — Post-Verification Checkpoint
+
+After the verification scan completes, check `sqgPass` from the scan output.
+
+**If `sqgPass: true` (SQG passed):**
+- Proceed directly to the final scan summary output.
+
+**If `sqgPass: false` (SQG still failing):**
+
+Display the updated findings report (same three-tier structure from Step 12a) reflecting the verification scan results.
+
+Then call `AskUserQuestion`:
+- **question**: `"The SQG is still failing after applying fixes. Would you like me to address more issues, or finish here and review the final summary?"`
+- **options**: `["Yes — fix more issues", "No — present the final scan summary"]`
+
+If the user selects **Yes — fix more issues**:
+- Re-enter the fix loop starting at Step 12b (determine new fix candidates from the verification scan results), then 12c → 12d → 12e → 12f → 12g → 12h.
+- Continue this loop until either `sqgPass: true` or the user selects **No** at this checkpoint.
+
+If the user selects **No — present the final scan summary**:
+- Proceed to the final scan summary output.
+
+**Free Trial mode**: `sqgPass` is always `true` or absent — Step 12h is a no-op; proceed directly to the final scan summary output.
 
 ---
 
