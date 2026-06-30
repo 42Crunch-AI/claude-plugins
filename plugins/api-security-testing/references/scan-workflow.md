@@ -46,7 +46,16 @@ Walk upward from `GIT_ROOT` looking for `.42c/conf.yaml`.
 
 ### 1b — Check for existing scan config
 
-Check whether `.42c/scan/<alias>/scanconf.json` exists.
+> **Scan config source — mandatory**
+>
+> Resolve scan config from the **filesystem only**. Never use git (or any VCS)
+> to locate, restore, or reconstruct a config:
+> - Do **not** run `git show`, `git log`, `git checkout`, or similar to read
+>   `.42c/scan/<alias>/scanconf.json` from history.
+> - If the on-disk file is **missing**, always run `scan conf generate` (Step 1b
+>   below). Never backfill from version control.
+
+Check whether `.42c/scan/<alias>/scanconf.json` exists **on disk**.
 
 **If it exists:**
 - Validate it:
@@ -199,6 +208,13 @@ This determines whether a second user (User 2) is needed before credential
 prompts are shown, so the user understands why they're being asked for two sets.
 
 ### Per-scheme credential collection
+
+> **Prerequisite:** The accounts you collect credentials for must already exist
+> in the database before the scan runs. The scan does not create these users —
+> ensure User 1, User 2 (if needed for BOLA), and Admin (if needed for BFLA)
+> are pre-registered before proceeding. If any account is missing, credential
+> acquisition will fail and all operations that depend on that credential will
+> be skipped.
 
 For each auth scheme, collect credentials using `AskUserQuestion` — never generate, guess, or suggest values. Collect in this order: User 1 first, then User 2 (BOLA only), then admin (BFLA only).
 
@@ -416,7 +432,9 @@ Do **not** put built-in variable expressions in `environments.default.variables`
 ]
 ```
 
-This keeps the operation reusable: a `before` block that calls `UserRegistration` can supply its own fixed throwaway values in its own `environment` override, while the happy-path scenario independently supplies randomised values — neither one interferes with the other.
+This keeps the operation reusable: a `before` block that calls `UserRegistration` can supply its own `environment` override, while the happy-path scenario independently supplies its own values — neither one interferes with the other.
+
+**Rule — uniqueness-constrained fields:** if a creator operation contains fields that must be unique across iterations (e.g. VIN, email, account number, username — fields where a duplicate causes a 409 Conflict or 400 Bad Request on the second run), use a built-in variable expression (`{{$randomFromSchema}}`, `{{$randomuint}}`, etc.) in **every** `environment` block that supplies those fields — including `before` blocks and dependency-chain creator steps, not just the happy-path scenario. Reserve static values for fields that are not uniqueness-constrained (e.g. passwords, boolean flags, fixed categorical values).
 
 **Common patterns:**
 
@@ -534,10 +552,10 @@ Operation              | Class  | BOLA? | Proposed data source
 UserLogin              | A      | no    | env vars: {{username}} / {{password}}
 UserRegistration       | A      | no    | {{$randomuint}} macro for username/email
 CreateResource         | A      | no    | OAS body example + {{userId}} from auth
-CancelResource         | B      | yes   | CreateResource → /{resourceId}
-RetrieveResource       | B      | yes   | CreateResource → /{resourceId}
-UpdateResource         | B      | yes   | CreateResource → /{resourceId}  ← PUT, BOLA
-DeleteUser             | B      | yes   | UserRegistration → /{userId}
+RetrieveResource       | B      | yes   | CreateResource → /{resourceId} (`before` block)
+UpdateResource         | B      | yes   | CreateResource → /{resourceId} (`before` block)
+DeleteResource         | B      | yes   | CreateResource → /{resourceId} (creator in scenario, not `before`)
+DeleteUser             | B      | yes   | UserRegistration → /{userId} (`before` block)
 DeleteAccount          | D      | no    | register+login throwaway → delete throwaway
 ```
 
@@ -551,14 +569,21 @@ Output the classification explanation and table above as a chat message, then ca
 
 ## Step 6 — Build Scenario Chains
 
-For every Class-B operation, inject an operation-level `before` dependency step
-along-side the `happy.path` scenario. The `before` step creates or fetches the
-resource, while the `happy.path` step executes the target request. Show the user
-each proposed chain in plain English before writing it.
+For every Class-B operation, wire a creator step that seeds the resource ID
+before the target request runs. Show the user each proposed chain in plain
+English before writing it.
 
-Do not consider a Class-B operation fully configured unless the resulting scan
-config contains a `before` block that seeds the resource or extracts the
-required identifier. A BOLA authorization test alone is not a substitute for a
+**Where the creator step goes depends on the target HTTP method:**
+
+| Target method | Creator placement | Why |
+|---------------|-------------------|-----|
+| GET, PUT, PATCH | Operation-level `before` block + single-step `happy.path` scenario | Resource must exist but is not destroyed by the happy path |
+| DELETE | First request inside `happy.path` `requests[]`, **not** in `before` | See **DELETE Class-B operations** below |
+
+Do not consider a Class-B operation fully configured unless the creator step
+reliably seeds the resource and extracts the required identifier (`variableAssignments`
+on the creator's success response, or on the creator operation definition that
+the `$ref` inherits). A BOLA authorization test alone is not a substitute for a
 dependency chain, and a static placeholder path value is not sufficient when a
 resource must be created or resolved first.
 
@@ -577,7 +602,31 @@ globally via `environments.default.variables`, global static defaults, or a
 global `before` assignment. Do not rely on values supplied only in another
 scenario.
 
-### Class-B: dependency chain pattern
+#### DELETE Class-B operations — creator inside the scenario
+
+When the Class-B **target operation is DELETE** and the happy path scenario is
+the delete step itself (especially when `BOLA? = yes`), put the creator
+operation as the **first request** in `scenarios[].requests[]`, immediately
+before the delete `$ref`. **Do not** put the creator only in the operation-level
+`before` block with a single-step delete scenario.
+
+**Why:** BOLA replays the operation's `happy.path` scenario with User 2's
+credential swapped onto the delete step. If User 1's happy path already deleted
+the resource — or the creator in `before` does not reliably re-seed the resource
+before the BOLA replay — the authorization test can return **404 Not Found**
+instead of the expected **401/403**. That produces a false BOLA failure even
+when the API correctly enforces ownership.
+
+**Expected BOLA replay flow (DELETE):**
+1. Creator step runs as User 1 → sets `{{resourceId}}` (or equivalent)
+2. Delete step runs as User 2 → API returns **403** if ownership is enforced
+   (**not** a finding)
+
+**Symptom to watch for in scan output:** `authentication-swapping-bola` failure
+with HTTP **404** and a message like "not found" on a DELETE — restructure the
+chain to scenario-inline creator before re-testing.
+
+### Class-B: dependency chain pattern (GET / PUT / PATCH)
 
 ```json
 "<OperationId>": {
@@ -620,6 +669,41 @@ scenario.
 }
 ```
 
+### Class-B: dependency chain pattern (DELETE)
+
+Use this shape when the target operation is DELETE and `BOLA? = yes` (or any
+Class-B delete where the happy path destroys the resource):
+
+```json
+"<DeleteOperationId>": {
+  "operationId": "<DeleteOperationId>",
+  "request": { ... },
+  "scenarios": [
+    {
+      "key": "happy.path",
+      "fuzzing": true,
+      "requests": [
+        {
+          "$ref": "#/operations/<CreatorOperationId>/request",
+          "environment": {
+            "<creatorVar1>": "<value1>"
+          }
+        },
+        {
+          "fuzzing": true,
+          "$ref": "#/operations/<DeleteOperationId>/request"
+        }
+      ]
+    }
+  ],
+  "authorizationTests": ["<BolaTestName>"]
+}
+```
+
+Do **not** add an operation-level `before` block for this pattern — the creator
+belongs in the scenario so BOLA replay seeds a live resource before the swapped
+delete runs.
+
 If no existing operation can reliably create or return the needed resource ID,
 stop and ask the user for the missing seed data or an alternate creator
 operation.
@@ -627,10 +711,13 @@ operation.
 The `<varName>` captured from the creator's response is then referenced as
 `{{varName}}` in the target operation's `paths` or `queries` array.
 
-Before running Step 8, verify each Class-B `before` chain is self-contained:
-- every referenced creator input variable is resolved either in that step's
-  `environment` or globally (`environments.default.variables` / global `before`);
-- no creator input depends only on another scenario's `environment` block;
+Before running Step 8, verify each Class-B chain is self-contained:
+- **GET/PUT/PATCH:** every `before` step resolves creator input variables in its
+  `environment` or globally; no creator input depends only on another scenario's
+  `environment` block.
+- **DELETE:** creator is the first step in `happy.path` `requests[]`; `variableAssignments`
+  on the creator's success response (on the creator operation definition or inline
+  on the scenario step) populate the ID used by the delete step.
 
 ### Global `before` block
 
@@ -656,6 +743,16 @@ block rather than repeating it in every scenario:
   }
 ]
 ```
+
+> **Do NOT use the global `before` block to register or provision test users**
+> The scan assumes all test users (User 1, User 2, Admin) already exist in
+> the database before the scan starts. User provisioning is an operational
+> prerequisite — it is not something the scan config manages. The global
+> `before` is for creating shared resources, or extracting shared
+> runtime variables that multiple operations need during the scan (e.g. a
+> resource ID or session value returned by a setup call). If you need a fresh
+> user per-iteration for a specific operation, use the Class-D throwaway-user
+> pattern on that operation's own `before` block instead.
 
 ### Class-C: user-provided data
 
@@ -797,8 +894,13 @@ clean slate.
 For every operation marked `BOLA? = yes` in the Step 5 table, register it
 with the top-level `authorizationTests` entry. The scanner replaces the
 source credential with the target credential on an otherwise identical
-execution of the operation's happy path — including any `before` blocks
-already defined on that operation, so valid resource IDs are always in scope.
+execution of the operation's `happy.path` scenario — including any `before`
+blocks on that operation **and** all steps in `scenarios[].requests[]`.
+
+> **DELETE operations:** ensure the creator step is the first request inside
+> `happy.path` (see Step 6 — DELETE Class-B operations). A creator-only `before`
+> block with a single-step delete scenario commonly causes false BOLA failures
+> (404 instead of 403).
 
 **Step 1 — Define the authorization test (once, top-level):**
 
@@ -1109,6 +1211,12 @@ $env:API_KEY="<value>"; $env:PLATFORM_HOST="<value>"
 **Immediately after the command completes**, extract the summary as TOON
 (Token-Oriented Object Notation — https://github.com/toon-format/toon) —
 never include raw stdout content in your response.
+
+> **SQG field location — common mistake to avoid:**
+> The SQG verdict is at `data["sqgPass"]` (a boolean) at the **root level** of
+> the parsed JSON — it is NOT nested inside `data["sqg"]`. Always read `data.get("sqgPass")`
+> and check whether the key is present. Always use the prescribed extraction snippet
+> below rather than writing a custom parser, to avoid reading the wrong field.
 
 > **Platform note**: macOS/Linux use the Python snippet below. Windows users
 > should use the PowerShell equivalent that follows.
