@@ -76,11 +76,12 @@ Installs the `42c-ast` binary for your OS/architecture, verifies its checksum, a
 
 ### `42crunch-audit`
 
-Runs a static analysis of an OpenAPI Specification and produces a 0–100 security score. Findings are classified into three tiers:
+Runs a static analysis of an OpenAPI Specification and produces a 0–100 security score. Findings are classified into four tiers:
 
 - **SQG-Blocking** — must fix to pass the Security Quality Gate
 - **Security** — recommended fixes
 - **Data Validation** — informational
+- **Spec Conformance** — OAS format defects outside the score/SQG
 
 Claude asks your explicit consent before applying any changes, then re-runs the audit to confirm passage.
 

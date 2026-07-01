@@ -33,10 +33,10 @@ explicit user permission before execution.
    not re-derive it. Read `../../references/audit-workflow.md` and apply only
    the commands for the identified mode throughout.
    The workflow runs the audit, then presents a **developer-readable,
-   risk-classified report** (SQG-Blocking / Security / Data Validation tiers)
-   with plain-English titles and risk descriptions — no raw rule IDs. It then
-   pauses and asks the user to consent before applying any fixes. Fixes are
-   only applied after explicit confirmation.
+   risk-classified report** (SQG-Blocking / Security / Data Validation / Spec
+   Conformance tiers) with plain-English titles and risk descriptions — no
+   raw rule IDs. It then pauses and asks the user to consent before applying
+   any fixes. Fixes are only applied after explicit confirmation.
 
 4. **Resolve the scan target URL.**
 

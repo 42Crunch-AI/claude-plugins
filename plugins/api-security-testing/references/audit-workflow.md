@@ -65,13 +65,17 @@ API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
 
 Parse `todo.json` (fall back to `report.json` if absent) and `sqg.json`. Then
 render a **developer-readable, risk-classified report**. Do NOT surface raw
-rule IDs — translate each one using the table in `./audit-rule-translations.md`.
+rule IDs — every issue type in the report carries its own `description` field
+(e.g. `d["security"]["issues"][issue_id]["description"]`); use that as the
+title. When an individual occurrence has a non-empty `specificDescription`,
+append it for extra context (operation, method, property name) — it is often
+absent or `""`, so always fall back to `description` alone.
 
 > **Token rule**: never load raw JSON file contents into your response. Use the
 > Python extraction below to pull only the fields you need (TOON output —
 > https://github.com/toon-format/toon), then display the formatted output.
-> Read `./audit-rule-translations.md` for the rule-ID translation table only
-> when rendering findings (not before).
+> See `./audit-report-schema.md` for the full report structure if you need to
+> confirm a field's shape or location — it is not needed to render findings.
 
 ### Score headline
 
@@ -126,23 +130,45 @@ import json, sys
 with open("$OUTPUT_DIR/todo.json") as f:
     d = json.load(f)
 
+state = d["openapiState"]
+
+# fileInvalid/structureInvalid reports carry no score or security/data
+# sections at all — handle them before touching anything else.
+if state == "fileInvalid":
+    errors = [k for k, v in d["errors"].items() if v]
+    print(f"openapi_state: fileInvalid")
+    print(f"file_errors: {', '.join(errors) if errors else '(unspecified)'}")
+    sys.exit(0)
+if state == "structureInvalid":
+    print(f"openapi_state: structureInvalid")
+    print(f"structural_issue_count: {d['issueCounter']}")
+    sys.exit(0)
+
 score      = d["score"]
 sec_score  = d["security"]["score"]
 data_score = d["data"]["score"]
 print(f"score: {score}  security: {sec_score}  data: {data_score}")
 
-# Collect issues as TOON
+# Collect issues as TOON. "semanticErrors"/"warnings" use totalIssues,
+# "security"/"data" use issueCounter — that field is the true total;
+# len(issues) is only what's shown (capped at maxEntriesPerIssue).
 issues = []
-for section in ["security", "data"]:
-    for issue_id, issue_data in d[section]["issues"].items():
-        crit  = issue_data["criticality"]
-        count = len(issue_data.get("issues", []))
-        issues.append((issue_id, section, crit, count))
+for section in ["semanticErrors", "warnings", "security", "data"]:
+    section_data = d.get(section)
+    if not section_data:
+        continue
+    for issue_id, issue_data in section_data["issues"].items():
+        crit      = issue_data.get("criticality", 0)
+        desc      = issue_data["description"]
+        shown     = len(issue_data.get("issues", []))
+        total     = issue_data.get("issueCounter", issue_data.get("totalIssues", shown))
+        truncated = issue_data.get("tooManyError", False)
+        issues.append((issue_id, section, crit, desc, shown, total, truncated))
 
 if issues:
-    print(f"\nissues[{len(issues)}]{{id,section,criticality,count}}:")
-    for issue_id, section, crit, count in issues:
-        print(f"  {issue_id},{section},{crit},{count}")
+    print(f"\nissues[{len(issues)}]{{id,section,criticality,description,shown,total,truncated}}:")
+    for issue_id, section, crit, desc, shown, total, truncated in issues:
+        print(f"  {issue_id},{section},{crit},{desc},{shown},{total},{truncated}")
 EOF
 ```
 
@@ -164,26 +190,50 @@ EOF
 
 ```powershell
 $d = Get-Content "$OUTPUT_DIR\todo.json" | ConvertFrom-Json
+$state = $d.openapiState
+
+# fileInvalid/structureInvalid reports carry no score or security/data
+# sections at all — handle them before touching anything else.
+if ($state -eq "fileInvalid") {
+    $fileErrors = ($d.errors.PSObject.Properties | Where-Object { $_.Value } | ForEach-Object { $_.Name })
+    Write-Host "openapi_state: fileInvalid"
+    Write-Host "file_errors: $(if ($fileErrors) { $fileErrors -join ', ' } else { '(unspecified)' })"
+    exit
+}
+if ($state -eq "structureInvalid") {
+    Write-Host "openapi_state: structureInvalid"
+    Write-Host "structural_issue_count: $($d.issueCounter)"
+    exit
+}
+
 $score     = $d.score
 $secScore  = $d.security.score
 $dataScore = $d.data.score
 Write-Host "score: $score  security: $secScore  data: $dataScore"
 
+# "semanticErrors"/"warnings" use totalIssues, "security"/"data" use
+# issueCounter — that field is the true total; .issues.Count is only what's
+# shown (capped at maxEntriesPerIssue).
 $issues = @()
-foreach ($section in @("security", "data")) {
-    $sectionIssues = $d.$section.issues
+foreach ($section in @("semanticErrors", "warnings", "security", "data")) {
+    $sectionData = $d.$section
+    if (-not $sectionData) { continue }
+    $sectionIssues = $sectionData.issues
     foreach ($issueId in ($sectionIssues | Get-Member -MemberType NoteProperty).Name) {
         $issueData = $sectionIssues.$issueId
-        $crit  = $issueData.criticality
-        $count = if ($issueData.issues) { $issueData.issues.Count } else { 0 }
-        $issues += [PSCustomObject]@{ id=$issueId; section=$section; criticality=$crit; count=$count }
+        $crit      = if ($null -ne $issueData.criticality) { $issueData.criticality } else { 0 }
+        $desc      = $issueData.description
+        $shown     = if ($issueData.issues) { $issueData.issues.Count } else { 0 }
+        $total     = if ($null -ne $issueData.issueCounter) { $issueData.issueCounter } elseif ($null -ne $issueData.totalIssues) { $issueData.totalIssues } else { $shown }
+        $truncated = [bool]$issueData.tooManyError
+        $issues += [PSCustomObject]@{ id=$issueId; section=$section; criticality=$crit; description=$desc; shown=$shown; total=$total; truncated=$truncated }
     }
 }
 
 if ($issues.Count -gt 0) {
-    Write-Host "`nissues[$($issues.Count)]{id,section,criticality,count}:"
+    Write-Host "`nissues[$($issues.Count)]{id,section,criticality,description,shown,total,truncated}:"
     foreach ($i in $issues) {
-        Write-Host "  $($i.id),$($i.section),$($i.criticality),$($i.count)"
+        Write-Host "  $($i.id),$($i.section),$($i.criticality),$($i.description),$($i.shown),$($i.total),$($i.truncated)"
     }
 }
 ```
@@ -215,7 +265,9 @@ initial_score      = score
 initial_sec_score  = sec_score
 initial_data_score = data_score
 
-# Determine which issue IDs are SQG-blocking
+# Determine which issue IDs are SQG-blocking (semanticErrors/warnings are
+# never SQG-blocking — they carry no per-type criticality and sit outside
+# the security/data score)
 blocking_ids = set()
 if sqg:
     # Platform mode: use sqg.json
@@ -229,12 +281,27 @@ else:
             if issue_data["criticality"] >= blocking_severity_threshold:
                 blocking_ids.add(issue_id)
 
-# Iterate issues across both sections
+# Iterate issues across both scored sections
 for section in ["security", "data"]:
     for issue_id, issue_data in d[section]["issues"].items():
-        pointers   = [index[loc["pointer"]] for loc in issue_data["issues"]]
-        crit       = issue_data["criticality"]   # 4=CRITICAL 3=HIGH 2=MEDIUM 1=LOW 0=INFO
+        title       = issue_data["description"]           # always populated — use as the title
+        pointers    = [index[loc["pointer"]] for loc in issue_data["issues"]]
+        # specificDescription is frequently absent or "" — never rely on it alone
+        details     = [loc.get("specificDescription") or title for loc in issue_data["issues"]]
+        crit        = issue_data["criticality"]   # 4=CRITICAL 3=HIGH 2=MEDIUM 1=LOW 0=INFO
         is_blocking = issue_id in blocking_ids
+        total       = issue_data["issueCounter"]           # true total, not len(pointers)
+        truncated   = issue_data["tooManyError"]           # True => total > len(pointers) shown
+
+# Iterate spec-conformance issues (never SQG-blocking, no per-type criticality)
+for section in ["semanticErrors", "warnings"]:
+    section_data = d.get(section)
+    if not section_data:
+        continue
+    for issue_id, issue_data in section_data["issues"].items():
+        title     = issue_data["description"]
+        total     = issue_data["totalIssues"]
+        truncated = issue_data["tooManyError"]
 
 # sqg.json
 sqg_passed     = sqg["acceptance"] == "yes"
@@ -245,15 +312,19 @@ blocking_rules = [r for d in sqg.get("processingDetails", [])
 
 ### Rendered format
 
-Group issues into three tiers. Resolve each `pointer` integer to its human-readable
+Group issues into four tiers. Resolve each `pointer` integer to its human-readable
 OAS path using `index[pointer]`. Severity label: 4=CRITICAL, 3=HIGH, 2=MEDIUM, 1=LOW, 0=INFO.
+Use each issue type's `description` as the title; append a location's
+`specificDescription` only when it is present and non-empty. When `truncated`
+is true for an issue type, append `(showing <shown> of <total> locations)` to
+its heading — never imply the listed locations are the complete set.
 
 ```
 ── 🔴 SQG-Blocking Issues — must fix before scan can run ──────────────────
 
-  1. <Plain-English Title>  [<SEVERITY>]
+  1. <description>  [<SEVERITY>]  (showing <shown> of <total> locations)  ← only if truncated
      Where:  <OAS path from index>
-     Risk:   <risk sentence from table>
+     Risk:   <description>
      Fix:    <one-line description of the minimal change needed>
 
   2. ...
@@ -265,17 +336,27 @@ OAS path using `index[pointer]`. Severity label: 4=CRITICAL, 3=HIGH, 2=MEDIUM, 1
 ── 🟡 Data Validation Issues (schemas · responses · parameters) ───────────
   (list issues from d["data"]["issues"] that are not SQG-blocking,
    same per-issue format)
+
+── 🟣 Spec Conformance Issues (OAS format, not part of the audit score) ────
+  (list issues from d["semanticErrors"]["issues"], same per-issue format;
+   these make the OAS non-conformant with the OpenAPI Specification even
+   though they don't affect the audit score or SQG; write "(none)" if absent)
 ```
 
-Number issues sequentially across all three sections so the user can reference
+Number issues sequentially across all four sections so the user can reference
 them by number in their consent response.
+
+After the four tiers, if `d["warnings"]` has any issue types, add one summary
+line: `N recommendation(s) available (non-blocking, do not affect score) —
+ask to see them if you want the detail.` Do not expand warnings by default;
+they are frequently in the hundreds and would drown out actionable findings.
 
 ---
 
 ## Step 3 — Consent Gate
 
 After rendering the report, call `AskUserQuestion`:
-- **question**: `"I found N SQG-blocking issue(s) (🔴) that must be fixed to pass the SQG, plus M additional finding(s) for your information. For the blocking issues I propose the following changes to <filename>: 1. [issue title] → [one-line fix description] 2. ... What would you like to do?"`
+- **question**: `"I found N SQG-blocking issue(s) (🔴) that must be fixed to pass the SQG, plus M additional finding(s) across Security, Data Validation, and Spec Conformance for your information (recommendations are not counted here — see the summary line). For the blocking issues I propose the following changes to <filename>: 1. [issue title] → [one-line fix description] 2. ... What would you like to do?"`
 - **options**: `["Yes — apply all fixes now", "Show me the diff first", "No — skip fixes for now"]`
 
 If the user chooses **"Show me the diff first"**, display the proposed change for each
@@ -286,6 +367,12 @@ Only advance to the next fix after the user confirms the current one.
 
 Do **not** offer to fix non-blocking issues at this stage — only the 🔴 items.
 Only proceed to Step 4 after the user explicitly confirms.
+
+When a 🔴 issue is truncated (`truncated` is true), say so explicitly in the
+consent question, e.g. `"...this affects 1016 locations; I'll fix the 30
+shown here, then we'll re-run the audit to catch the rest."` Set expectations
+that Step 4 may need more than one fix-and-re-audit cycle before this issue
+clears the SQG.
 
 **API-first vs code-first — per-issue handling:**
 For findings that represent a **spec/implementation mismatch** (e.g. `additionalproperties-true`
@@ -312,11 +399,20 @@ For each SQG-blocking issue the user has approved:
    make speculative or cosmetic changes — only fix what is explicitly blocking
    SQG acceptance.
 
+If an issue was `truncated` (more locations exist than were shown), fixing the
+listed pointers does not clear the rule — the remaining, unseen occurrences
+still block SQG. Treat this as expected and plan to repeat fix-and-re-audit
+until `issueCounter` for that rule reaches `0`, rather than treating the first
+pass as failed.
+
 After all fixes are applied, re-run the audit (**Step 1**) to confirm the SQG
 now passes:
 - **Platform mode**: confirm `sqg["acceptance"]` is `"yes"` in the new `sqg.json`.
 - **Free Trial mode**: confirm the new score meets `target_score` and no issues
   with criticality ≥ `blocking_severity_threshold` remain in `todo.json`.
+- If a previously blocking issue still has occurrences after a fix cycle
+  (`issueCounter > 0` for that rule ID), repeat Steps 3–4 for the remaining
+  locations before declaring it resolved.
 
 After confirming the SQG passes, compute the before/after score deltas and
 pass them to the final summary:
