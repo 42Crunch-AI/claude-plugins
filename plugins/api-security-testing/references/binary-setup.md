@@ -14,6 +14,11 @@ This procedure is used in two contexts:
 
 The caller specifies which mode applies. Default is silent.
 
+The pre-flight cache fast path (Step 0.5) applies **only in silent mode**. In
+verbose mode (`42crunch-setup`), always perform the live version check — the
+user explicitly asked to install, update, or verify, so skip Step 0.5 and go
+straight from Step 0 to Step 1.
+
 ---
 
 ## Step 0 — Check for an existing binary
@@ -44,9 +49,60 @@ $BINARY_PATH = "$BIN_DIR\42c-ast.exe"
   INSTALLED_VERSION=$("$BINARY_PATH" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
   ```
 
-  Then continue to **Step 2** (fetch manifest and compare versions). Do **not**
-  exit — always verify that the installed version is current before declaring
-  setup complete.
+  In **silent mode**, continue to **Step 0.5** (consult the pre-flight cache)
+  before deciding whether a network round-trip is even needed. In **verbose
+  mode**, skip Step 0.5 and continue directly to **Step 1**. Either way, do
+  **not** exit here — always verify that the installed version is current
+  before declaring setup complete.
+
+---
+
+## Step 0.5 — Consult the pre-flight cache (silent mode only)
+
+The manifest fetch in Step 2 is a network call — skip it when a recent check
+already confirmed the binary is current. Resolve the cache file path:
+
+- macOS/Linux: `$HOME/.42crunch/conf/.preflight-cache`
+- Windows: `%APPDATA%\42Crunch\conf\.preflight-cache`
+
+```bash
+# macOS / Linux
+CACHE_FILE="$HOME/.42crunch/conf/.preflight-cache"
+TTL="${PREFLIGHT_CACHE_TTL_SECONDS:-86400}"
+CACHE_FRESH=0
+if [ -f "$CACHE_FILE" ]; then
+  CHECKED_AT=$(grep '^CHECKED_AT=' "$CACHE_FILE" | cut -d= -f2)
+  NOW=$(date +%s)
+  if [ -n "$CHECKED_AT" ] && [ $((NOW - CHECKED_AT)) -lt "$TTL" ]; then
+    CACHE_FRESH=1
+  fi
+fi
+```
+
+```powershell
+# Windows
+$CacheFile = "$env:APPDATA\42Crunch\conf\.preflight-cache"
+$Ttl = if ($env:PREFLIGHT_CACHE_TTL_SECONDS) { [int]$env:PREFLIGHT_CACHE_TTL_SECONDS } else { 86400 }
+$CacheFresh = $false
+if (Test-Path $CacheFile) {
+  $CheckedAtLine = Select-String -Path $CacheFile -Pattern "^CHECKED_AT=" | Select-Object -First 1
+  if ($CheckedAtLine) {
+    $CheckedAt = [int]($CheckedAtLine.Line -replace "^CHECKED_AT=", "")
+    $Now = [int][double]::Parse((Get-Date -UFormat %s))
+    if (($Now - $CheckedAt) -lt $Ttl) { $CacheFresh = $true }
+  }
+}
+```
+
+- **`CACHE_FRESH` is `1` / `$true`** → the binary was verified current within
+  the cache window. Skip Step 1 and Step 2 entirely. `INSTALLED_VERSION` (from
+  Step 0) is the confirmed version. Return to the caller — no network call,
+  no manifest fetch, no cache rewrite (the existing window is left as-is).
+- **`CACHE_FRESH` is `0` / `$false`** (missing, expired, or malformed cache) →
+  continue to **Step 1** as normal.
+
+Override the default 24-hour window by setting `PREFLIGHT_CACHE_TTL_SECONDS`
+before invoking a skill (e.g. `0` to force a live check every time).
 
 ---
 
@@ -168,7 +224,8 @@ $EXPECTED_SHA256 = $Match.sha256
 ```
 
 If `INSTALLED_VERSION` (from Step 0) equals `LATEST_VERSION` → binary is
-up to date. Skip Step 3 and return to the caller.
+up to date. Skip Step 3 and continue to **Step 4** (update the pre-flight
+cache).
 
 If the installed version is older (or the binary was absent) → continue to
 Step 3.
@@ -222,4 +279,38 @@ Move-Item -Force $TmpBin $BINARY_PATH
 ```
 
 Confirm that `--version` exits 0. If it does not, report the failure and
-stop — do not proceed to credential setup.
+stop — do not proceed to credential setup. If it does, continue to **Step 4**
+(update the pre-flight cache).
+
+---
+
+## Step 4 — Update the pre-flight cache
+
+Record that the binary was just verified against the manifest, so the next
+**silent-mode** pre-flight run (within the TTL window) can skip Steps 1–2 via
+Step 0.5. Run this step in **both** modes — even though verbose mode never
+reads the cache, writing it here primes it for the very next pre-flight call
+after setup finishes.
+
+```bash
+# macOS / Linux
+mkdir -p "$HOME/.42crunch/conf"
+CURRENT_VERSION="${LATEST_VERSION:-$INSTALLED_VERSION}"
+cat > "$HOME/.42crunch/conf/.preflight-cache" << EOF
+CHECKED_AT=$(date +%s)
+BINARY_VERSION=$CURRENT_VERSION
+EOF
+```
+
+```powershell
+# Windows
+New-Item -ItemType Directory -Force -Path "$env:APPDATA\42Crunch\conf" | Out-Null
+$CurrentVersion = if ($LATEST_VERSION) { $LATEST_VERSION } else { $INSTALLED_VERSION }
+$Now = [int][double]::Parse((Get-Date -UFormat %s))
+@"
+CHECKED_AT=$Now
+BINARY_VERSION=$CurrentVersion
+"@ | Set-Content -Path "$env:APPDATA\42Crunch\conf\.preflight-cache"
+```
+
+Return to the caller.

@@ -11,29 +11,56 @@ used.
 
 ## Step 1 — Check for Existing Credentials
 
-Silently check for an existing credentials file:
+Silently check for an existing credentials file. **Never read or print more
+than the 4-character prefix needed for masking** — the rest of the secret
+must not enter any command, tool output, or chat message:
 
 ```bash
 # macOS / Linux
-grep -E "^(TRIAL_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
+ENV_FILE="$HOME/.42crunch/conf/env"
+if grep -q '^TRIAL_TOKEN=' "$ENV_FILE" 2>/dev/null; then
+  echo "MODE=freetrial"
+  grep -oE '^TRIAL_TOKEN=.{4}' "$ENV_FILE" | sed 's/^TRIAL_TOKEN=/PREFIX=/'
+elif grep -qE '^API_KEY=(api_|ide_)' "$ENV_FILE" 2>/dev/null; then
+  echo "MODE=platform"
+  grep -oE '^API_KEY=(api_|ide_)' "$ENV_FILE" | sed 's/^API_KEY=/PREFIX=/'
+elif grep -q '^API_KEY=' "$ENV_FILE" 2>/dev/null; then
+  echo "MODE=badformat"
+else
+  echo "MODE=none"
+fi
 ```
 
 ```powershell
 # Windows
-Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(TRIAL_TOKEN|API_KEY)=" 2>$null
+$EnvFile = "$env:APPDATA\42Crunch\conf\env"
+if (Select-String -Path $EnvFile -Pattern '^TRIAL_TOKEN=(.{4})' -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -OutVariable m) {
+  Write-Output "MODE=freetrial"
+  Write-Output ("PREFIX=" + $m[0].Matches[0].Groups[1].Value)
+} elseif (Select-String -Path $EnvFile -Pattern '^API_KEY=(api_|ide_)' -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -OutVariable m) {
+  Write-Output "MODE=platform"
+  Write-Output ("PREFIX=" + $m[0].Matches[0].Groups[1].Value)
+} elseif (Select-String -Path $EnvFile -Pattern '^API_KEY=' -Quiet -ErrorAction SilentlyContinue) {
+  Write-Output "MODE=badformat"
+} else {
+  Write-Output "MODE=none"
+}
 ```
 
-**Mode detection from the file:**
+**Mode detection from the output:**
 
-- `TRIAL_TOKEN` is present → **Free Trial mode**
-- `API_KEY` starts with `api_` or `ide_` → **Platform mode**
+- `MODE=freetrial` → **Free Trial mode**
+- `MODE=platform` → **Platform mode**
+- `MODE=badformat` / `MODE=none` → no usable credential found; proceed to Step 2 as if none exists.
 
-**If a credential is found**, call `AskUserQuestion`:
+**If `MODE=freetrial` or `MODE=platform`** (a credential is found), call `AskUserQuestion`:
 - **question**: `"Credentials already configured in ~/.42crunch/conf/env — running in <mode> mode. Key: <masked>. Would you like to keep the existing credentials or replace them?"`
 - **options**: `["Keep existing credentials", "Replace credentials"]`
 
-Masking rules: `api_••••••••` / `ide_••••••••` for platform tokens (keep
-prefix, replace remaining chars); show first 4 characters + `••••••••` for
+Build `<masked>` directly from `PREFIX` — never from the full secret:
+`api_••••••••` / `ide_••••••••` for platform tokens; `<PREFIX>••••••••` for
 free trial tokens (e.g. `eyJh••••••••`).
 
 If keeping → **credential setup complete.**
@@ -153,29 +180,36 @@ Skip on Windows — `APPDATA` is already protected by Windows ACLs.
 
 ## Step 4 — Verify
 
-Re-read the file and confirm the correct variable is present:
+Confirm the correct variable is present — a presence check only, never the
+value. Use `-q` / `-Quiet` so the secret cannot appear in the tool output:
 
 **Platform mode (macOS / Linux):**
 ```bash
-grep "^API_KEY=" "$HOME/.42crunch/conf/env"
+grep -q "^API_KEY=" "$HOME/.42crunch/conf/env" && echo "OK" || echo "MISSING"
 ```
 
 **Platform mode (Windows):**
 ```powershell
-Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^API_KEY="
+if (Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^API_KEY=" -Quiet) { "OK" } else { "MISSING" }
 ```
 
 **Free Trial mode (macOS / Linux):**
 ```bash
-grep "^TRIAL_TOKEN=" "$HOME/.42crunch/conf/env"
+grep -q "^TRIAL_TOKEN=" "$HOME/.42crunch/conf/env" && echo "OK" || echo "MISSING"
 ```
 
 **Free Trial mode (Windows):**
 ```powershell
-Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^TRIAL_TOKEN="
+if (Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^TRIAL_TOKEN=" -Quiet) { "OK" } else { "MISSING" }
 ```
 
-Display confirmation with the value **masked**:
+If `MISSING` → report the failure (see Error Handling below) and stop; do
+not present the summary in Step 5.
+
+Display confirmation with the value **masked**, built from the `PREFIX`
+already captured in Step 1 (existing credential) or from the value the user
+just typed in Step 2 (new credential) — do not re-read the secret from disk
+to build this display:
 
 **Platform mode (macOS / Linux):**
 > Credentials saved to `~/.42crunch/conf/env`.

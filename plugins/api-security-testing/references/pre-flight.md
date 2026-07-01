@@ -5,6 +5,28 @@ any skill-specific logic. Do not proceed if any step fails or the user cancels.
 
 ---
 
+## Fast Path — Skip Redundant Checks
+
+Before Step 1, check whether pre-flight has already completed successfully
+earlier in **this same conversation**, with no intervening credential change
+(the user has not run `42crunch-setup` again since):
+
+- **Yes** → skip Step 1 (Binary Check) and Step 2 (Credential Check) entirely.
+  Reuse the mode, credentials, and binary path already established. Continue
+  directly to Step 3 (Resolve the OAS File).
+  - If Step 3 resolves to the **same** OAS file as the previous run in this
+    conversation → also skip Step 4 (Tag Detection) and reuse the previously
+    resolved tag.
+  - If Step 3 resolves to a **different** OAS file → still run Step 4 for
+    the new file (a different file may carry a different tag, or none).
+- **No** (first pre-flight run this conversation, or credentials changed since
+  the last run) → run all steps in order starting from Step 1.
+
+This is a same-conversation shortcut only. It does not apply across separate
+conversations — Step 1 has its own cross-session cache (see `binary-setup.md`).
+
+---
+
 ## Step 1 — Binary Check
 
 Resolve the canonical binary path for the current OS:
@@ -20,20 +42,46 @@ Announce: `"Checking for 42c-ast..."`
 
 ## Step 2 — Credential Check
 
-Read `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env` (Windows):
+**Never read or print the raw value of `API_KEY` / `TRIAL_TOKEN`.** This step
+only needs a mode classification — get it without the secret ever entering a
+command, tool output, or chat message:
 
 ```bash
-grep -E "^(TRIAL_TOKEN|API_KEY)=" "$HOME/.42crunch/conf/env" 2>/dev/null
+# macOS / Linux
+ENV_FILE="$HOME/.42crunch/conf/env"
+if grep -q '^TRIAL_TOKEN=' "$ENV_FILE" 2>/dev/null; then
+  echo "MODE=freetrial"
+elif grep -qE '^API_KEY=(api_|ide_)' "$ENV_FILE" 2>/dev/null; then
+  echo "MODE=platform"
+elif grep -q '^API_KEY=' "$ENV_FILE" 2>/dev/null; then
+  echo "MODE=badformat"
+else
+  echo "MODE=none"
+fi
 ```
 
 ```powershell
-Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(TRIAL_TOKEN|API_KEY)=" 2>$null
+# Windows
+$EnvFile = "$env:APPDATA\42Crunch\conf\env"
+if (Select-String -Path $EnvFile -Pattern '^TRIAL_TOKEN=' -Quiet -ErrorAction SilentlyContinue) {
+  Write-Output "MODE=freetrial"
+} elseif (Select-String -Path $EnvFile -Pattern '^API_KEY=(api_|ide_)' -Quiet -ErrorAction SilentlyContinue) {
+  Write-Output "MODE=platform"
+} elseif (Select-String -Path $EnvFile -Pattern '^API_KEY=' -Quiet -ErrorAction SilentlyContinue) {
+  Write-Output "MODE=badformat"
+} else {
+  Write-Output "MODE=none"
+}
 ```
 
-- **`TRIAL_TOKEN`** is set → **Free Trial mode**. Use `--freemium-host stateless.42crunch.com:443` and `--token <TRIAL_TOKEN>` in all commands. Proceed silently.
-- **`API_KEY`** starts with `api_` or `ide_` → **Platform mode**. Read `PLATFORM_HOST` from the same file (required — run `42crunch-setup` to reconfigure if missing). Proceed silently.
-- **`API_KEY`** is set but does **not** start with `api_` or `ide_` → warn the user: `"Your API key doesn't match the expected format (api_... or ide_...). Please check it or run 42crunch-setup to reconfigure."` Stop — do not proceed.
-- **Neither found** → call `AskUserQuestion`:
+- **`MODE=freetrial`** → **Free Trial mode**. Use `--freemium-host stateless.42crunch.com:443` and `--token <TRIAL_TOKEN>` in all commands (the token is substituted directly into the `42c-ast` invocation — never echoed on its own). Proceed silently.
+- **`MODE=platform`** → **Platform mode**. Read `PLATFORM_HOST` separately — it's a URL, not a secret, safe to print in full:
+  ```bash
+  grep '^PLATFORM_HOST=' "$ENV_FILE"
+  ```
+  Required — run `42crunch-setup` to reconfigure if missing. Proceed silently.
+- **`MODE=badformat`** → warn the user: `"Your API key doesn't match the expected format (api_... or ide_...). Please check it or run 42crunch-setup to reconfigure."` Stop — do not proceed.
+- **`MODE=none`** → call `AskUserQuestion`:
   - **question**: `"I don't see any 42Crunch credentials configured yet. I can walk you through setup now, or you can run 42crunch-setup manually when you're ready."`
   - **options**: `["Set up now", "Cancel — I'll run 42crunch-setup manually"]`
   - If **Set up now** → invoke `42crunch-setup` as a **subroutine** (pass caller context: `pre-flight`). Do not proceed if setup fails. On success, continue to Step 3.
