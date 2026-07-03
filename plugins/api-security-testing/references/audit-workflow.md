@@ -2,8 +2,9 @@
 
 > **Command conventions used throughout this file**
 > - `<binary>` — the full path resolved during binary discovery (e.g. `~/.42crunch/bin/42c-ast`). Never call `42c-ast` by name alone unless it is confirmed to be on PATH.
-> - **Platform mode**: prefix every command with `API_KEY="<resolved-value>" PLATFORM_HOST="<value>"` (both values read from `~/.42crunch/conf/env` on macOS/Linux or `%APPDATA%\42Crunch\conf\env` on Windows).
-> - **Free Trial mode**: add `--freemium-host stateless.42crunch.com:443` and `--token <TRIAL_TOKEN>` to every command.
+> - **Never write a literal credential value into a command.** Load credentials from the conf file into the environment first, then let the command inherit them — the raw value must never appear in a command string, tool output, or chat message.
+> - **Platform mode**: before every command, load credentials — macOS/Linux: `set -a; . "$HOME/.42crunch/conf/env"; set +a`; Windows: `Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }`. The command then inherits `API_KEY`/`PLATFORM_HOST` — no explicit prefix needed.
+> - **Free Trial mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` (macOS/Linux) or `--token $env:TRIAL_TOKEN` (Windows) to every command — never the literal token.
 > - **Score tracking**: record `initial_score`, `initial_sec_score`, and `initial_data_score` immediately after the first parse (Step 2). These are used to build the before/after comparison in the final summary.
 
 ---
@@ -30,7 +31,8 @@ New-Item -ItemType Directory -Force -Path $OUTPUT_DIR | Out-Null
 ### Platform mode
 
 ```bash
-API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
+set -a; . "$HOME/.42crunch/conf/env"; set +a
+<binary> audit run \
   --enrich=false \
   --output "$OUTPUT_DIR/report.json" \
   --output-format json \
@@ -42,10 +44,11 @@ API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
 ### Free Trial mode
 
 ```bash
+set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> audit run \
   --enrich=false \
   --freemium-host stateless.42crunch.com:443 \
-  --token <TRIAL_TOKEN> \
+  --token "$TRIAL_TOKEN" \
   --output "$OUTPUT_DIR/report.json" \
   --output-format json \
   <path-to-oas-file>
@@ -58,6 +61,22 @@ API_KEY="<resolved-value>" PLATFORM_HOST="<value>" <binary> audit run \
 | `report.json` | Audit results                                                                                      |
 | `todo.json`   | Same as report.json but with `index[]` for OAS path resolution — **prefer this file**              |
 | `sqg.json`    | SQG result — written in platform mode whenever `--report-sqg` is passed (with or without `--tag`). Not written in free trial mode. |
+
+### Check the run result before proceeding
+
+The command above also prints a top-level status object to stdout (already
+visible — no extra capture needed): `{astVersion, logs, statusCode,
+statusMessage}`. Check it before touching any output file:
+
+- **`statusCode: 0`** → continue to Step 2.
+- **`statusCode: 3` and `statusMessage: limits_reached`** (Free Trial mode
+  only) → the trial has hit its usage limit. Follow `./trial-expired.md` now.
+  Do not proceed to Step 2 — `todo.json`/`report.json` were not written.
+- **Any other non-zero `statusCode`** → surface `statusMessage` to the user
+  as an error and stop. Do not attempt to parse `todo.json`/`report.json`.
+
+A re-run in Step 4 (after fixes are applied) is just this same command again
+— apply this same check to that run too.
 
 ---
 

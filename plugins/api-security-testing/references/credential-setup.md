@@ -136,6 +136,14 @@ mkdir -p "$HOME/.42crunch/conf"
 New-Item -ItemType Directory -Force -Path "$env:APPDATA\42Crunch\conf" | Out-Null
 ```
 
+**This step fully replaces the credentials file — it is never a merge.** Use
+the `Write` tool specifically (not `Edit`) so the result contains **only**
+the keys for the resolved mode below, with nothing left over from a
+previous mode. This matters most when switching modes: `pre-flight.md`'s
+mode detection checks `TRIAL_TOKEN` before `API_KEY`, so a leftover
+`TRIAL_TOKEN` line after switching to Platform mode would cause the system
+to keep misidentifying the account as Free Trial.
+
 Write the file. Do not quote values. Do not add spaces around `=`.
 
 **Platform mode**
@@ -175,6 +183,20 @@ chmod 600 "$HOME/.42crunch/conf/env"
 ```
 
 Skip on Windows — `APPDATA` is already protected by Windows ACLs.
+
+**Clear the trial-expired sentinel, if present.** Any successful write here —
+regardless of which mode it resolves to — means the account state has just
+changed, so a previously-recorded "expired" state no longer applies:
+
+```bash
+# macOS / Linux
+rm -f "$HOME/.42crunch/conf/.trial-expired"
+```
+
+```powershell
+# Windows
+Remove-Item "$env:APPDATA\42Crunch\conf\.trial-expired" -ErrorAction SilentlyContinue
+```
 
 ---
 

@@ -9,7 +9,8 @@ any skill-specific logic. Do not proceed if any step fails or the user cancels.
 
 Before Step 1, check whether pre-flight has already completed successfully
 earlier in **this same conversation**, with no intervening credential change
-(the user has not run `42crunch-setup` again since):
+(the user has not run `42crunch-setup`, nor gone through `trial-expired.md`'s
+reconfiguration, since):
 
 - **Yes** → skip Step 1 (Binary Check) and Step 2 (Credential Check) entirely.
   Reuse the mode, credentials, and binary path already established. Continue
@@ -50,7 +51,11 @@ command, tool output, or chat message:
 # macOS / Linux
 ENV_FILE="$HOME/.42crunch/conf/env"
 if grep -q '^TRIAL_TOKEN=' "$ENV_FILE" 2>/dev/null; then
-  echo "MODE=freetrial"
+  if [ -f "$HOME/.42crunch/conf/.trial-expired" ]; then
+    echo "MODE=freetrial_expired"
+  else
+    echo "MODE=freetrial"
+  fi
 elif grep -qE '^API_KEY=(api_|ide_)' "$ENV_FILE" 2>/dev/null; then
   echo "MODE=platform"
 elif grep -q '^API_KEY=' "$ENV_FILE" 2>/dev/null; then
@@ -64,7 +69,11 @@ fi
 # Windows
 $EnvFile = "$env:APPDATA\42Crunch\conf\env"
 if (Select-String -Path $EnvFile -Pattern '^TRIAL_TOKEN=' -Quiet -ErrorAction SilentlyContinue) {
-  Write-Output "MODE=freetrial"
+  if (Test-Path "$env:APPDATA\42Crunch\conf\.trial-expired") {
+    Write-Output "MODE=freetrial_expired"
+  } else {
+    Write-Output "MODE=freetrial"
+  }
 } elseif (Select-String -Path $EnvFile -Pattern '^API_KEY=(api_|ide_)' -Quiet -ErrorAction SilentlyContinue) {
   Write-Output "MODE=platform"
 } elseif (Select-String -Path $EnvFile -Pattern '^API_KEY=' -Quiet -ErrorAction SilentlyContinue) {
@@ -75,6 +84,7 @@ if (Select-String -Path $EnvFile -Pattern '^TRIAL_TOKEN=' -Quiet -ErrorAction Si
 ```
 
 - **`MODE=freetrial`** → **Free Trial mode**. Use `--freemium-host stateless.42crunch.com:443` and `--token <TRIAL_TOKEN>` in all commands (the token is substituted directly into the `42c-ast` invocation — never echoed on its own). Proceed silently.
+- **`MODE=freetrial_expired`** → a previous run already discovered this trial hit its usage limit. Skip Step 3 onward entirely — follow `./trial-expired.md` now, without attempting any `42c-ast` call.
 - **`MODE=platform`** → **Platform mode**. Read `PLATFORM_HOST` separately — it's a URL, not a secret, safe to print in full:
   ```bash
   grep '^PLATFORM_HOST=' "$ENV_FILE"

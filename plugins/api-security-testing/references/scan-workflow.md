@@ -2,8 +2,9 @@
 
 > **Command conventions used throughout this file**
 > - `<binary>` — the full path resolved during binary discovery (e.g. `~/.42crunch/bin/42c-ast`). Never call `42c-ast` by name alone unless it is confirmed to be on PATH.
-> - **Platform mode**: prefix every command with `API_KEY="<resolved-value>" PLATFORM_HOST="<value>"` (both values read from `~/.42crunch/conf/env` on macOS/Linux or `%APPDATA%\42Crunch\conf\env` on Windows).
-> - **Free Trial mode**: add `--freemium-host stateless.42crunch.com:443` and `--token <TRIAL_TOKEN>` to every command.
+> - **Never write a literal credential value into a command.** Load credentials from the conf file into the environment first, then let the command inherit them — the raw value must never appear in a command string, tool output, or chat message.
+> - **Platform mode**: before every command, load credentials — macOS/Linux: `set -a; . "$HOME/.42crunch/conf/env"; set +a`; Windows: `Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }`. The command then inherits `API_KEY`/`PLATFORM_HOST` — no explicit prefix needed.
+> - **Free Trial mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` (macOS/Linux) or `--token $env:TRIAL_TOKEN` (Windows) to every command — never the literal token.
 > - **PowerShell string quoting**: when a variable is immediately followed by `:` inside a double-quoted string, PowerShell parses `$varName:` as a PSDrive reference (like `$env:TEMP`) and throws `InvalidVariableReferenceWithDrive`. Always use `${varName}` to delimit the name — e.g. `"${opName}: ..."` not `"$opName: ..."`. This applies to any inline PowerShell generated during the session, not just the static snippets below.
 
 ---
@@ -61,17 +62,25 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists **on disk**.
 - Validate it:
   ```bash
   # Platform mode
-  API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf validate <relative-oas-path> \
+  set -a; . "$HOME/.42crunch/conf/env"; set +a
+  <binary> scan conf validate <relative-oas-path> \
     --conf-file .42c/scan/<alias>/scanconf.json
 
   # Free Trial mode
+  set -a; . "$HOME/.42crunch/conf/env"; set +a
   <binary> scan conf validate <relative-oas-path> \
     --freemium-host stateless.42crunch.com:443 \
-    --token <TRIAL_TOKEN> \
+    --token "$TRIAL_TOKEN" \
     --conf-file .42c/scan/<alias>/scanconf.json
   ```
-- If valid (`statusCode: 0`): store `CONF_FILE=.42c/scan/<alias>/scanconf.json` and proceed to Step 2.
-- If invalid: treat as missing (re-generate).
+- Check the status object before deciding — this may be the first `42c-ast`
+  call this run makes, so check for trial expiry here rather than assuming a
+  failure just means an invalid config:
+  - **`statusCode: 0`** → store `CONF_FILE=.42c/scan/<alias>/scanconf.json` and proceed to Step 2.
+  - **`statusCode: 3` and `statusMessage: limits_reached`** (Free Trial mode
+    only) → the trial has hit its usage limit. Follow `./trial-expired.md` now.
+    Do not treat this as an invalid config, do not attempt to regenerate.
+  - **Any other non-zero** → treat as invalid (re-generate).
 
 **If it does not exist (or was invalid):**
 - Ensure the output directory exists:
@@ -82,20 +91,28 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists **on disk**.
   Platform mode: include `--tag` only when a tag was resolved. Free Trial mode: omit `--tag`.
   ```bash
   # Platform mode
-  API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf generate \
+  set -a; . "$HOME/.42crunch/conf/env"; set +a
+  <binary> scan conf generate \
     --output-format json \
     --output .42c/scan/<alias>/scanconf.json \
     [--tag <category>:<tag>] \
     <relative-oas-path>
 
   # Free Trial mode
+  set -a; . "$HOME/.42crunch/conf/env"; set +a
   <binary> scan conf generate \
     --freemium-host stateless.42crunch.com:443 \
-    --token <TRIAL_TOKEN> \
+    --token "$TRIAL_TOKEN" \
     --output-format json \
     --output .42c/scan/<alias>/scanconf.json \
     <relative-oas-path>
   ```
+- Check the generate result before validating — this may be the first
+  `42c-ast` call this run makes:
+  - **`statusCode: 3` and `statusMessage: limits_reached`** (Free Trial mode
+    only) → follow `./trial-expired.md` now. Do not proceed to validate.
+  - **Any other non-zero** → surface the error to the user and stop.
+  - **`statusCode: 0`** → continue below.
 - Validate (use the same mode-appropriate command as above).
 - If valid: store `CONF_FILE=.42c/scan/<alias>/scanconf.json` and proceed to Step 2.
 - If invalid: surface the error to the user and stop.
@@ -154,13 +171,15 @@ run an immediate config validation checkpoint before proceeding.
 
 ```bash
 # Platform mode
-API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf validate <relative-oas-path> \
+set -a; . "$HOME/.42crunch/conf/env"; set +a
+<binary> scan conf validate <relative-oas-path> \
   --conf-file <CONF_FILE>
 
 # Free Trial mode
+set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan conf validate <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
-  --token <TRIAL_TOKEN> \
+  --token "$TRIAL_TOKEN" \
   --conf-file <CONF_FILE>
 ```
 
@@ -987,13 +1006,15 @@ classification, scenario chains, and authorization test wiring), validate
 
 ```bash
 # Platform mode
-API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan conf validate <relative-oas-path> \
+set -a; . "$HOME/.42crunch/conf/env"; set +a
+<binary> scan conf validate <relative-oas-path> \
   --conf-file <CONF_FILE>
 
 # Free Trial mode
+set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan conf validate <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
-  --token <TRIAL_TOKEN> \
+  --token "$TRIAL_TOKEN" \
   --conf-file <CONF_FILE>
 ```
 
@@ -1023,25 +1044,28 @@ operations with failing happy paths, producing a cascade of false positives.
 
 ```bash
 # macOS / Linux — Platform mode
-API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false \
+set -a; . "$HOME/.42crunch/conf/env"; set +a
+<binary> scan run --enrich=false \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
 
 # macOS / Linux — Free Trial mode
+set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
-  --token <TRIAL_TOKEN> --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
+  --token "$TRIAL_TOKEN" --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
 ```
 
 ```powershell
 # Windows — Platform mode
-$env:API_KEY="<value>"; $env:PLATFORM_HOST="<value>"
+Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
 & <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE> `
   > "$env:TEMP\42c-happy-out.json" 2>&1
 
 # Windows — Free Trial mode
+Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
 & <binary> scan run --enrich=false <relative-oas-path> `
   --freemium-host stateless.42crunch.com:443 `
-  --token <TRIAL_TOKEN> --conf-file <CONF_FILE> `
+  --token $env:TRIAL_TOKEN --conf-file <CONF_FILE> `
   > "$env:TEMP\42c-happy-out.json" 2>&1
 ```
 
@@ -1186,25 +1210,28 @@ Run the full scan, capturing output to a temp file for extraction:
 
 ```bash
 # macOS / Linux — Platform mode
-API_KEY="<value>" PLATFORM_HOST="<value>" <binary> scan run --enrich=false --report-sqg \
+set -a; . "$HOME/.42crunch/conf/env"; set +a
+<binary> scan run --enrich=false --report-sqg \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
 
 # macOS / Linux — Free Trial mode
+set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
-  --token <TRIAL_TOKEN> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
+  --token "$TRIAL_TOKEN" --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
 ```
 
 ```powershell
 # Windows — Platform mode
-$env:API_KEY="<value>"; $env:PLATFORM_HOST="<value>"
+Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
 & <binary> scan run --enrich=false --report-sqg <relative-oas-path> --conf-file <CONF_FILE> `
   > "$env:TEMP\42c-scan-out.json" 2>&1
 
 # Windows — Free Trial mode
+Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
 & <binary> scan run --enrich=false <relative-oas-path> `
   --freemium-host stateless.42crunch.com:443 `
-  --token <TRIAL_TOKEN> --conf-file <CONF_FILE> `
+  --token $env:TRIAL_TOKEN --conf-file <CONF_FILE> `
   > "$env:TEMP\42c-scan-out.json" 2>&1
 ```
 
