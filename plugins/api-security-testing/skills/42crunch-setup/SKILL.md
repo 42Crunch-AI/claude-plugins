@@ -60,11 +60,11 @@ The procedure covers, in order:
   `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env`
   (Windows). If already configured: show mode + masked key, offer to keep or replace.
 - If not configured (or replacing): walk the user through the guided flow:
-  - **How do you access 42Crunch — token (Free Trial / Individual / Individual Pro / Team) or Platform account (Enterprise)?**
-    - Platform account → enter API Key → select Platform URL (US / EU / Other)
-    - Token → **Do you already have your token?**
-      - Yes → enter token
-      - No → **Start a Free Trial** (show registration link, `[42Crunch Free Trial](https://42crunch.com/freemium/?source=claude)`) or **view paid plans** (Individual / Individual Pro / Team / Enterprise pricing link) — either way, stop and wait for the user to return
+  - **Do you have a 42Crunch Subscription?**
+    - No → show Free Trial registration link (`[42Crunch Free Trial](https://42crunch.com/freemium/?source=claude)`) and the paid-plans pricing breakdown (Individual / Individual Pro / Team / Enterprise); stop and wait for the user to return, then ask token-based vs Enterprise and route accordingly
+    - Yes → **Is it a token or an Enterprise Platform account?**
+      - Token → enter token
+      - Enterprise → enter API Key → select Platform URL (US / EU / Other)
 - Write credentials to `~/.42crunch/conf/env`, set `chmod 600` on macOS/Linux.
 
 ### Step 4 — Final verification
