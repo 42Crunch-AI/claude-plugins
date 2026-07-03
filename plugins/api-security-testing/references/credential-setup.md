@@ -51,8 +51,8 @@ if (Select-String -Path $EnvFile -Pattern '^TRIAL_TOKEN=(.{4})' -ErrorAction Sil
 
 **Mode detection from the output:**
 
-- `MODE=freetrial` → **Free Trial mode**
-- `MODE=platform` → **Platform mode**
+- `MODE=freetrial` → **Token mode** (covers Free Trial, Individual, Individual Pro, Team 10, and Team 25 — they all use the same personal access token)
+- `MODE=platform` → **Platform mode** (Enterprise)
 - `MODE=badformat` / `MODE=none` → no usable credential found; proceed to Step 2 as if none exists.
 
 **If `MODE=freetrial` or `MODE=platform`** (a credential is found), call `AskUserQuestion`:
@@ -61,22 +61,22 @@ if (Select-String -Path $EnvFile -Pattern '^TRIAL_TOKEN=(.{4})' -ErrorAction Sil
 
 Build `<masked>` directly from `PREFIX` — never from the full secret:
 `api_••••••••` / `ide_••••••••` for platform tokens; `<PREFIX>••••••••` for
-free trial tokens (e.g. `eyJh••••••••`).
+tokens (e.g. `eyJh••••••••`).
 
 If keeping → **credential setup complete.**
 If replacing → continue to Step 2.
 
 ---
 
-## Step 2 — Determine User Type
+## Step 2 — Determine Access Type
 
 Call `AskUserQuestion`:
-- **question**: `"Do you have an existing 42Crunch platform account? (Platform accounts log in to a URL like company.42crunch.cloud and use an API key. Free Trial is a free personal account that covers full audit and scan functionalities.)"`
-- **options**: `["Yes — I have a platform account", "No — I'm using Free Trial"]`
+- **question**: `"How do you access 42Crunch? (Free Trial, Individual, Individual Pro, and Team plans all use a personal access token. Enterprise uses a company Platform account with an API key.)"`
+- **options**: `["I have a token (Free Trial, Individual, Individual Pro, or Team)", "I have a Platform account (Enterprise)"]`
 
 ---
 
-### Path A — Existing User (Platform mode)
+### Path A — Enterprise (Platform mode)
 
 Call `AskUserQuestion`:
 - **question**: `"Please enter your API Key (it usually starts with api_ or ide_):"`
@@ -93,30 +93,44 @@ Store values as `API_KEY` and `PLATFORM_HOST`. Continue to Step 3.
 
 ---
 
-### Path B — Not an Existing User
+### Path B — Token-based (Free Trial, Individual, Individual Pro, Team)
 
 Call `AskUserQuestion`:
-- **question**: `"Are you a registered 42Crunch Free Trial user?"`
-- **options**: `["Yes — I have a token", "No — I need to register"]`
+- **question**: `"Do you already have your token?"`
+- **options**: `["Yes — I have a token", "No — I need one"]`
 
-#### Path B-1 — Registered Free Trial user
+#### Path B-1 — Has a token
 
 Call `AskUserQuestion`:
-- **question**: `"Please paste your Free Trial Token (it's a long Base64 string from your registration confirmation email):"`
+- **question**: `"Please paste your token (it's a long Base64 string):"`
 
 Wait for input. Store value as `TRIAL_TOKEN`. Continue to Step 3.
 
-#### Path B-2 — Not registered
+#### Path B-2 — Needs a token
 
-Inform the user:
+Call `AskUserQuestion`:
+- **question**: `"What would you like to do?"`
+- **options**: `["Start a Free Trial — free, full audit and scan functionality", "View paid plans — Individual, Individual Pro, or Team"]`
+
+**If Free Trial** — inform the user:
 > No problem — getting a free account takes a minute.
 >
 > 1. Visit **[42Crunch Free Trial](https://42crunch.com/freemium/?source=claude)**.
 > 2. Fill in your email address, accept terms and conditions and click Submit.
-> 3. Check your inbox for a confirmation email that includes your free trial token.
+> 3. Check your inbox for a confirmation email that includes your token.
 >
 > When you're ready, just say "continue" or "I have my token" and I'll pick up
 > exactly where we left off — you won't need to restart setup.
+
+**If paid plans** — inform the user:
+> Visit **[42Crunch Pricing](https://42crunch.com/pricing/)** to choose a plan:
+> - **Individual** — 1,000 Security Tokens / month, same token-based setup you'd use here.
+> - **Individual Pro** — 3,000 Security Tokens / month, same token-based setup.
+> - **Team 10** — unlimited Security Tokens for teams of up to 10, same token-based setup.
+> - **Team 25** — unlimited Security Tokens for teams of up to 25, same token-based setup.
+> - **Enterprise** — for teams and companies needing CI/CD integration, API Protection, and more. Uses a company Platform account with an API key instead of a token.
+>
+> When you're ready, just say "continue" and I'll pick up exactly where we left off.
 
 **Stop — do not proceed.** Credential setup is incomplete. Do not write any credentials file.
 
@@ -142,7 +156,7 @@ the keys for the resolved mode below, with nothing left over from a
 previous mode. This matters most when switching modes: `pre-flight.md`'s
 mode detection checks `TRIAL_TOKEN` before `API_KEY`, so a leftover
 `TRIAL_TOKEN` line after switching to Platform mode would cause the system
-to keep misidentifying the account as Free Trial.
+to keep misidentifying the account as Token mode.
 
 Write the file. Do not quote values. Do not add spaces around `=`.
 
@@ -162,7 +176,7 @@ API_KEY=<value>
 PLATFORM_HOST=<value>
 ```
 
-**Free Trial mode**
+**Token mode**
 
 macOS / Linux — write to `~/.42crunch/conf/env`:
 
@@ -215,12 +229,12 @@ grep -q "^API_KEY=" "$HOME/.42crunch/conf/env" && echo "OK" || echo "MISSING"
 if (Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^API_KEY=" -Quiet) { "OK" } else { "MISSING" }
 ```
 
-**Free Trial mode (macOS / Linux):**
+**Token mode (macOS / Linux):**
 ```bash
 grep -q "^TRIAL_TOKEN=" "$HOME/.42crunch/conf/env" && echo "OK" || echo "MISSING"
 ```
 
-**Free Trial mode (Windows):**
+**Token mode (Windows):**
 ```powershell
 if (Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^TRIAL_TOKEN=" -Quiet) { "OK" } else { "MISSING" }
 ```
@@ -241,13 +255,13 @@ to build this display:
 > Credentials saved to `%APPDATA%\42Crunch\conf\env`.
 > Mode: **Platform** | Key: `api_••••••••` | Host: `<PLATFORM_HOST>`
 
-**Free Trial mode (macOS / Linux):**
+**Token mode (macOS / Linux):**
 > Credentials saved to `~/.42crunch/conf/env`.
-> Mode: **Free Trial** | Token: `<first-4-chars>••••••••`  ← show first 4 chars of the token
+> Mode: **Token** | Token: `<first-4-chars>••••••••`  ← show first 4 chars of the token
 
-**Free Trial mode (Windows):**
+**Token mode (Windows):**
 > Credentials saved to `%APPDATA%\42Crunch\conf\env`.
-> Mode: **Free Trial** | Token: `<first-4-chars>••••••••`  ← show first 4 chars of the token
+> Mode: **Token** | Token: `<first-4-chars>••••••••`  ← show first 4 chars of the token
 
 ---
 
@@ -257,5 +271,5 @@ to build this display:
 |---|---|
 | User provides empty API Key | Re-prompt once with: "It looks like the key didn't come through — please paste it again (it usually starts with `api_` or `ide_`). If you're not sure where to find it, check the 42Crunch platform under **Settings → API Keys**." If still empty, stop with: "I wasn't able to capture your API key. Your binary is installed and working — when you're ready, run `42crunch-setup` again to finish credential setup." |
 | User provides empty Platform URL (Other) | Re-prompt once with: "I didn't catch the URL — please paste your platform address (it should look like `https://your-org.42crunch.cloud`)." If still empty, stop with: "I wasn't able to capture your platform URL. Your binary is installed — run `42crunch-setup` again whenever you have the details ready." |
-| User provides empty Free Trial Token | Re-prompt once with: "The token didn't come through — please paste it again. You can find it in the registration confirmation email you received" If still empty, stop with: "I wasn't able to capture your Free Trial token. Your binary is installed — run `42crunch-setup` again whenever you have the token ready." |
+| User provides empty token | Re-prompt once with: "The token didn't come through — please paste it again." If still empty, stop with: "I wasn't able to capture your token. Your binary is installed — run `42crunch-setup` again whenever you have the token ready." |
 | Cannot write to credentials file | Report the permission error. On macOS/Linux, suggest `chmod u+w ~/.42crunch/conf/env` or creating `~/.42crunch/conf` manually. On Windows, suggest verifying write access to `%APPDATA%\42Crunch\conf` and creating the folder manually if needed. |

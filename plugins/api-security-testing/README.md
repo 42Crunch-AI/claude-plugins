@@ -20,7 +20,7 @@ The `42crunch-api-security-testing` plugin is designed for AI-assisted developme
 ## Prerequisites
 
 - [Claude Code](https://claude.ai/code) (CLI, desktop app, or IDE extension)
-- A 42Crunch account — [Free Trial](https://42crunch.com/freemium/?source=claude) or paid (Platform API key)
+- A 42Crunch account — [Free Trial](https://42crunch.com/freemium/?source=claude), a paid token-based plan (Individual, Individual Pro, or Team), or an Enterprise Platform account
 - For `42crunch-scan`: a running API server reachable at the URL in `servers[0]` of your OAS (or via `SCAN42C_HOST`)
 
 The `42c-ast` binary is downloaded and kept up to date automatically on first use.
@@ -63,7 +63,7 @@ See [RECIPES.md](./RECIPES.md) for step-by-step guides covering the most common 
 
 ### `42crunch-setup`
 
-Installs the `42c-ast` binary for your OS/architecture, verifies its checksum, and walks you through credential configuration. Supports Platform (API key) and Free Trial (token) modes. Credentials are stored in `~/.42crunch/conf/env` with `600` permissions.
+Installs the `42c-ast` binary for your OS/architecture, verifies its checksum, and walks you through credential configuration. Supports Platform (Enterprise) and Token (Free Trial, Individual, Individual Pro, Team) modes. Credentials are stored in `~/.42crunch/conf/env` with `600` permissions.
 
 > **Trigger:** "set up 42crunch", "configure 42crunch", "install 42c-ast", "update 42c-ast", "set api key", "42crunch not working", "binary not found"
 

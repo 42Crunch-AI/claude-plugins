@@ -39,7 +39,7 @@ explain what they'll be able to do once setup is complete:
 >
 > I'll handle this in two quick steps:
 > 1. Install the `42c-ast` analysis binary on this machine.
-> 2. Connect your 42Crunch credentials (existing platform account or free account).
+> 2. Connect your 42Crunch credentials (Enterprise Platform account, or a token from Free Trial / Individual / Individual Pro / Team).
 >
 > Let's go.
 
@@ -60,11 +60,11 @@ The procedure covers, in order:
   `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env`
   (Windows). If already configured: show mode + masked key, offer to keep or replace.
 - If not configured (or replacing): walk the user through the guided flow:
-  - **Are you an existing 42Crunch user?**
-    - Yes → enter API Key → select Platform URL (US / EU / Other)
-    - No → **Are you a registered 42Crunch Free Trial user?**
-      - Yes → enter Free Trial Token
-      - No → show registration link (`[42Crunch Free Trial](https://42crunch.com/freemium/?source=claude)`) and stop
+  - **How do you access 42Crunch — token (Free Trial / Individual / Individual Pro / Team) or Platform account (Enterprise)?**
+    - Platform account → enter API Key → select Platform URL (US / EU / Other)
+    - Token → **Do you already have your token?**
+      - Yes → enter token
+      - No → **Start a Free Trial** (show registration link, `[42Crunch Free Trial](https://42crunch.com/freemium/?source=claude)`) or **view paid plans** (Individual / Individual Pro / Team / Enterprise pricing link) — either way, stop and wait for the user to return
 - Write credentials to `~/.42crunch/conf/env`, set `chmod 600` on macOS/Linux.
 
 ### Step 4 — Final verification
@@ -132,11 +132,11 @@ off.
 | Item             | Status                                              |
 |------------------|-----------------------------------------------------|
 | Binary           | <BINARY_PATH> v<version>                            |
-| Credential mode  | <Platform \| Free Trial>                            |
+| Credential mode  | <Platform \| Token>                                 |
 | API key / Token  | Platform: `api_••••••••` or `ide_••••••••`          |
-|                  | Free Trial: `<first-4-chars>••••••••`               |
+|                  | Token: `<first-4-chars>••••••••`                    |
 |                  | (stored in <path>)                                  |
-| Platform host    | <url>  ← omit this row for free trial mode          |
+| Platform host    | <url>  ← omit this row for Token mode               |
 
 ```
 
@@ -146,9 +146,9 @@ off.
 
 - All detection steps (binary check, credential check) run silently. Surface
   output only on failure or when prompting the user.
-- Never print the API key or Free Trial token in plaintext after the user enters
+- Never print the API key or token in plaintext after the user enters
   it. Always mask it (`api_••••••••` / `ide_••••••••` for platform tokens — keep
-  prefix, replace rest; `<first-4-chars>••••••••` for free trial tokens, e.g.
+  prefix, replace rest; `<first-4-chars>••••••••` for tokens, e.g.
   `eyJh••••••••`).
 - Use the `Bash` tool for all shell commands; use the `Edit` or `Write`
   tools when writing config files — never shell redirection.
@@ -163,4 +163,4 @@ off.
 |-----------------|----------------------------------|-----------------|
 | `API_KEY`       | *(required)*                     | Platform        |
 | `PLATFORM_HOST` | *(set during setup)*             | Platform only   |
-| `TRIAL_TOKEN`   | *(required)*                     | Free Trial      |
+| `TRIAL_TOKEN`   | *(required)*                     | Token-based (Free Trial / Individual / Individual Pro / Team) |
