@@ -4,10 +4,10 @@
 
 Handle the case where a Free Trial token has hit its 15-day usage limit
 (`statusCode: 3` / `statusMessage: limits_reached` from a `42c-ast` call).
-Guide the user to upgrade — Individual, Individual Pro, Team 10, or Team 25
-(all stay on the same token mechanism) or Enterprise (switches to Platform
-mode) — or let them postpone, and persist whichever outcome occurs so future
-runs don't repeat a doomed call.
+Guide the user to upgrade — Individual or Individual Pro (stay on the same
+token mechanism) or Team 10, Team 25, or Enterprise (switch to Platform mode
+with an API key) — or let them postpone, and persist whichever outcome occurs
+so future runs don't repeat a doomed call.
 
 This doc is only ever reached as a sub-flow — from `pre-flight.md`'s sentinel
 check, or reactively from `audit-workflow.md` / `scan-workflow.md` when a
@@ -59,8 +59,8 @@ Show:
 > Visit **[42Crunch Pricing](https://42crunch.com/pricing/)** to choose a plan:
 > - **Individual** — 1,000 Security Tokens / month, same token-based setup you're using now.
 > - **Individual Pro** — 3,000 Security Tokens / month, same token-based setup.
-> - **Team 10** — unlimited Security Tokens for teams of up to 10, same token-based setup.
-> - **Team 25** — unlimited Security Tokens for teams of up to 25, same token-based setup.
+> - **Team 10** — unlimited Security Tokens for teams of up to 10. Uses a Platform account with an API key instead of a token.
+> - **Team 25** — unlimited Security Tokens for teams of up to 25. Uses a Platform account with an API key instead of a token.
 > - **Enterprise** — for teams and companies needing CI/CD integration, API Protection, and more. Uses a company Platform account with an API key instead of a token.
 >
 > Once you've upgraded, just say "continue" and I'll pick up right here.
@@ -73,21 +73,22 @@ is incomplete until they do.
 ## Step 4 — On resume, determine which credential type
 
 What matters here is the credential mechanism, not the exact plan name —
-Individual, Individual Pro, Team 10, and Team 25 all issue the same kind of
-token, so one question and one path covers all four:
+Individual and Individual Pro issue a token, while Team 10, Team 25, and
+Enterprise use a Platform account with an API key, so one question routes
+to the right path:
 
 Call `AskUserQuestion`:
 - **question**: `"How do you access your new plan?"`
-- **options**: `["I have a new access token (Individual, Individual Pro, Team 10, or Team 25)", "I have a Platform API key (Enterprise)"]`
+- **options**: `["I have a new access token (Individual or Individual Pro)", "I have a Platform API key (Team 10, Team 25, or Enterprise)"]`
 
-### Path A — Token-based plans (Individual, Individual Pro, Team 10, Team 25)
+### Path A — Token-based plans (Individual, Individual Pro)
 
 Call `AskUserQuestion`:
 - **question**: `"Please paste your new plan token (same format as your trial token):"`
 
 Wait for input. Store value as `TRIAL_TOKEN`. Continue to Step 5.
 
-### Path B — Enterprise
+### Path B — Platform plans (Team 10, Team 25, Enterprise)
 
 Call `AskUserQuestion`:
 - **question**: `"Please enter your Platform API Key (it usually starts with api_ or ide_):"`

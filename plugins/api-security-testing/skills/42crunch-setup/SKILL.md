@@ -39,7 +39,7 @@ explain what they'll be able to do once setup is complete:
 >
 > I'll handle this in two quick steps:
 > 1. Install the `42c-ast` analysis binary on this machine.
-> 2. Connect your 42Crunch credentials (Enterprise Platform account, or a token from Free Trial / Individual / Individual Pro / Team).
+> 2. Connect your 42Crunch credentials (a token from Free Trial / Individual / Individual Pro, or a Platform account with an API key for Team 10 / Team 25 / Enterprise).
 >
 > Let's go.
 
@@ -61,10 +61,10 @@ The procedure covers, in order:
   (Windows). If already configured: show mode + masked key, offer to keep or replace.
 - If not configured (or replacing): walk the user through the guided flow:
   - **Do you have a 42Crunch Subscription?**
-    - No → show Free Trial registration link (`[42Crunch Free Trial](https://42crunch.com/freemium/?source=claude)`) and the paid-plans pricing breakdown (Individual / Individual Pro / Team / Enterprise); stop and wait for the user to return, then ask token-based vs Enterprise and route accordingly
-    - Yes → **Is it a token or an Enterprise Platform account?**
-      - Token → enter token
-      - Enterprise → enter API Key → select Platform URL (US / EU / Other)
+    - No → show Free Trial registration link (`[42Crunch Free Trial](https://42crunch.com/freemium/?source=claude)`) and the paid-plans pricing breakdown (Individual / Individual Pro use a token; Team 10 / Team 25 / Enterprise use a Platform account with an API key); stop and wait for the user to return, then ask token vs Platform-API-key and route accordingly
+    - Yes → **Do you have a token, or a Platform account with an API key?**
+      - Token (Free Trial / Individual / Individual Pro) → enter token
+      - Platform API key (Team 10 / Team 25 / Enterprise) → enter API Key → select Platform URL (US / EU / Other)
 - Write credentials to `~/.42crunch/conf/env`, set `chmod 600` on macOS/Linux.
 
 ### Step 4 — Final verification
@@ -161,6 +161,6 @@ off.
 
 | Variable        | Default                          | Mode            |
 |-----------------|----------------------------------|-----------------|
-| `API_KEY`       | *(required)*                     | Platform        |
-| `PLATFORM_HOST` | *(set during setup)*             | Platform only   |
-| `TRIAL_TOKEN`   | *(required)*                     | Token-based (Free Trial / Individual / Individual Pro / Team) |
+| `API_KEY`       | *(required)*                     | Platform (Team 10 / Team 25 / Enterprise) |
+| `PLATFORM_HOST` | *(set during setup)*             | Platform only (Team 10 / Team 25 / Enterprise) |
+| `TRIAL_TOKEN`   | *(required)*                     | Token-based (Free Trial / Individual / Individual Pro) |
