@@ -93,8 +93,9 @@ absent or `""`, so always fall back to `description` alone.
 > **Token rule**: never load raw JSON file contents into your response. Use the
 > Python extraction below to pull only the fields you need (TOON output —
 > https://github.com/toon-format/toon), then display the formatted output.
-> See `./audit-report-schema.md` for the full report structure if you need to
-> confirm a field's shape or location — it is not needed to render findings.
+> Do **not** read `./audit-report-schema.md` unless an extraction snippet
+> below fails or a field is unexpectedly missing — it is never needed to
+> render findings, and reading it costs ~8k tokens.
 
 ### Score headline
 

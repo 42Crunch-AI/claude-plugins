@@ -270,51 +270,24 @@ Do not proceed until at least the primary user's credentials are confirmed.
 
 ### Writing credential acquisition flows into `authenticationDetails`
 
-When a credential requires a request sequence (e.g. a login call) to acquire its token,
-add a `requests` array to the credential object.
+**Read `./scanconf-templates.md` now if it is not already in context** — it is
+the canonical library for every scanconf JSON shape used in Steps 2–6
+(credential acquisition, operation patterns, dependency chains, authorization
+tests). Never re-read it once loaded, and never invent a shape it already
+defines.
+
+When a credential requires a request sequence (e.g. a login call) to acquire
+its token, add a `requests` array to the credential object using the
+**`authenticationDetails` — bearer token** pattern from the templates file.
+`<LoginOperationId>` is the `operationId` of the operation that issues the
+token (look for a `POST /login`, `POST /auth/token`, or equivalent);
+`<tokenField>` is the JSON Pointer path to the token value in the response
+body.
 
 **Rule: always use `$ref` to reference an existing operation — never inline `request` objects.**
 Inline blocks have no `operationId`, which the VS Code extension rejects with
 `Unable to parse request that has no operationId set`. The `42c-ast` CLI accepts both
 formats, but the extension does not — always use `$ref` regardless.
-
-**Pattern:**
-```json
-"authenticationDetails": [
-  {
-    "<SchemeName>": {
-      "type": "<bearer|oauth2|basic|apiKey>",
-      "default": "<CredentialName>",
-      "credentials": {
-        "<CredentialName>": {
-          "description": "<description>",
-          "credential": "{{<tokenVar>}}",
-          "requests": [
-            {
-              "$ref": "#/operations/<LoginOperationId>/request",
-              "responses": {
-                "200": {
-                  "expectations": { "httpStatus": 200 },
-                  "variableAssignments": {
-                    "<tokenVar>": {
-                      "in": "body", "from": "response", "contentType": "json",
-                      "path": { "type": "jsonPointer", "value": "/<tokenField>" }
-                    }
-                  }
-                }
-              }
-            }
-          ]
-        }
-      }
-    }
-  }
-]
-```
-
-Replace `<LoginOperationId>` with the `operationId` of the operation that issues the
-token (look for a `POST /login`, `POST /auth/token`, or equivalent). Replace
-`<tokenField>` with the JSON Pointer path to the token value in the response body.
 
 **Variable scoping — credential context only:**
 `variableAssignments` in a credential acquisition step are scoped to the credential
@@ -324,7 +297,7 @@ available in the operation context at scan time. Any extra variables captured he
 **Rule:** capture only the credential (for example Bearer token, API key, or Basic Auth) 
 in `authenticationDetails`. For any other data needed from the login response, 
 add an explicit `before` block on each operation that needs it and capture the value
-there instead (See Step 6 — Class-B: dependency chain pattern).
+there instead (see Step 6 and the Class-B patterns in `./scanconf-templates.md`).
   - If many operations share the same variable, use the global 
     before block (see Step 6 — Global `before` block). Do not rely on
     variableAssignments in `authenticationDetails` for anything beyond the
@@ -336,33 +309,10 @@ credential in `authenticationDetails` as User 1. Populate or adjust that
 credential's `credential`, `requests`, and `variableAssignments` fields as
 needed instead of creating a second User 1 credential entry.
 
-**Second user (BOLA):** use `environment` to override the credential variables for that
-step without duplicating the operation:
-```json
-"<SecondCredentialName>": {
-  "credential": "{{<secondTokenVar>}}",
-  "requests": [
-    {
-      "$ref": "#/operations/<LoginOperationId>/request",
-      "environment": {
-        "<usernameVar>": "{{<user2UsernameVar>}}",
-        "<passwordVar>": "{{<user2PasswordVar>}}"
-      },
-      "responses": {
-        "200": {
-          "expectations": { "httpStatus": 200 },
-          "variableAssignments": {
-            "<secondTokenVar>": {
-              "in": "body", "from": "response", "contentType": "json",
-              "path": { "type": "jsonPointer", "value": "/<tokenField>" }
-            }
-          }
-        }
-      }
-    }
-  ]
-}
-```
+**Second user (BOLA) / Admin (BFLA):** use a step-level `environment` override
+on the same login `$ref` to swap credential variables without duplicating the
+operation — the `User2Token` / `AdminToken` entries in the templates'
+`authenticationDetails` pattern show the exact shape.
 
 `environment` overrides apply only to that single step. The keys must match the template
 variable names used in the referenced operation's `requestBody`. If the login operation
@@ -588,23 +538,37 @@ Output the classification explanation and table above as a chat message, then ca
 
 ## Step 6 — Build Scenario Chains
 
+All JSON shapes for this step live in `./scanconf-templates.md` (the canonical
+pattern library) — read it now if it is not already in context. This step
+decides *which* pattern applies *where*; the templates file defines the exact
+JSON for each named pattern.
+
 For every Class-B operation, wire a creator step that seeds the resource ID
 before the target request runs. Show the user each proposed chain in plain
 English before writing it.
 
 **Where the creator step goes depends on the target HTTP method:**
 
-| Target method | Creator placement | Why |
-|---------------|-------------------|-----|
-| GET, PUT, PATCH | Operation-level `before` block + single-step `happy.path` scenario | Resource must exist but is not destroyed by the happy path |
-| DELETE | First request inside `happy.path` `requests[]`, **not** in `before` | See **DELETE Class-B operations** below |
+| Target method | Creator placement | Pattern in `scanconf-templates.md` |
+|---------------|-------------------|-------------------------------------|
+| GET, PUT, PATCH | Operation-level `before` block + single-step `happy.path` scenario | **Class-B — dependency chain, GET / PUT / PATCH** |
+| DELETE | First request inside `happy.path` `requests[]`, **not** in `before` | **Class-B — dependency chain, DELETE** |
+
+**Why DELETE differs:** BOLA replays `happy.path` with User 2's credential on
+the delete step; a creator that lives only in `before` may not re-seed the
+resource before the replay, so the test returns 404 instead of 401/403 — a
+false BOLA failure. The full rationale, replay flow, and
+symptom-to-watch-for are documented with the DELETE pattern in the templates
+file.
 
 Do not consider a Class-B operation fully configured unless the creator step
 reliably seeds the resource and extracts the required identifier (`variableAssignments`
 on the creator's success response, or on the creator operation definition that
 the `$ref` inherits). A BOLA authorization test alone is not a substitute for a
 dependency chain, and a static placeholder path value is not sufficient when a
-resource must be created or resolved first.
+resource must be created or resolved first. If no existing operation can
+reliably create or return the needed resource ID, stop and ask the user for
+the missing seed data or an alternate creator operation.
 
 #### `before` block rules:
 1. Always prefer to reference existing OAS operations in `before` blocks — avoid creating
@@ -621,114 +585,8 @@ globally via `environments.default.variables`, global static defaults, or a
 global `before` assignment. Do not rely on values supplied only in another
 scenario.
 
-#### DELETE Class-B operations — creator inside the scenario
-
-When the Class-B **target operation is DELETE** and the happy path scenario is
-the delete step itself (especially when `BOLA? = yes`), put the creator
-operation as the **first request** in `scenarios[].requests[]`, immediately
-before the delete `$ref`. **Do not** put the creator only in the operation-level
-`before` block with a single-step delete scenario.
-
-**Why:** BOLA replays the operation's `happy.path` scenario with User 2's
-credential swapped onto the delete step. If User 1's happy path already deleted
-the resource — or the creator in `before` does not reliably re-seed the resource
-before the BOLA replay — the authorization test can return **404 Not Found**
-instead of the expected **401/403**. That produces a false BOLA failure even
-when the API correctly enforces ownership.
-
-**Expected BOLA replay flow (DELETE):**
-1. Creator step runs as User 1 → sets `{{resourceId}}` (or equivalent)
-2. Delete step runs as User 2 → API returns **403** if ownership is enforced
-   (**not** a finding)
-
-**Symptom to watch for in scan output:** `authentication-swapping-bola` failure
-with HTTP **404** and a message like "not found" on a DELETE — restructure the
-chain to scenario-inline creator before re-testing.
-
-### Class-B: dependency chain pattern (GET / PUT / PATCH)
-
-```json
-"<OperationId>": {
-  "operationId": "<OperationId>",
-  "request": { ... },
-  "before": [
-    {
-      "$ref": "#/operations/<CreatorOperationId>/request",
-      "environment": {
-        "<creatorVar1>": "<value1>",
-        "<creatorVar2>": "<value2>"
-      },
-      "responses": {
-        "<successCode>": {
-          "expectations": { "httpStatus": <successCode> },
-          "variableAssignments": {
-            "<varName>": {
-              "in": "body",
-              "from": "response",
-              "contentType": "json",
-              "path": { "type": "jsonPointer", "value": "/<fieldName>" }
-            }
-          }
-        }
-      }
-    }
-  ],
-  "scenarios": [
-    {
-      "key": "happy.path",
-      "requests": [
-        {
-          "fuzzing": true,
-          "$ref": "#/operations/<OperationId>/request"
-        }
-      ],
-      "fuzzing": true
-    }
-  ]
-}
-```
-
-### Class-B: dependency chain pattern (DELETE)
-
-Use this shape when the target operation is DELETE and `BOLA? = yes` (or any
-Class-B delete where the happy path destroys the resource):
-
-```json
-"<DeleteOperationId>": {
-  "operationId": "<DeleteOperationId>",
-  "request": { ... },
-  "scenarios": [
-    {
-      "key": "happy.path",
-      "fuzzing": true,
-      "requests": [
-        {
-          "$ref": "#/operations/<CreatorOperationId>/request",
-          "environment": {
-            "<creatorVar1>": "<value1>"
-          }
-        },
-        {
-          "fuzzing": true,
-          "$ref": "#/operations/<DeleteOperationId>/request"
-        }
-      ]
-    }
-  ],
-  "authorizationTests": ["<BolaTestName>"]
-}
-```
-
-Do **not** add an operation-level `before` block for this pattern — the creator
-belongs in the scenario so BOLA replay seeds a live resource before the swapped
-delete runs.
-
-If no existing operation can reliably create or return the needed resource ID,
-stop and ask the user for the missing seed data or an alternate creator
-operation.
-
-The `<varName>` captured from the creator's response is then referenced as
-`{{varName}}` in the target operation's `paths` or `queries` array.
+Apply the matching Class-B pattern from `./scanconf-templates.md` to every
+Class-B operation.
 
 Before running Step 8, verify each Class-B chain is self-contained:
 - **GET/PUT/PATCH:** every `before` step resolves creator input variables in its
@@ -741,37 +599,11 @@ Before running Step 8, verify each Class-B chain is self-contained:
 ### Global `before` block
 
 If multiple operations share the same dependency variable (e.g. many operations
-need `customerId` from a login call), add the creator to the global `before`
-block rather than repeating it in every scenario:
-
-```json
-"before": [
-  {
-    "$ref": "#/operations/<AuthOp>/request",
-    "responses": {
-      "200": {
-        "expectations": { "httpStatus": 200 },
-        "variableAssignments": {
-          "customerId": {
-            "in": "body", "from": "response", "contentType": "json",
-            "path": { "type": "jsonPointer", "value": "/user/customerId" }
-          }
-        }
-      }
-    }
-  }
-]
-```
-
-> **Do NOT use the global `before` block to register or provision test users**
-> The scan assumes all test users (User 1, User 2, Admin) already exist in
-> the database before the scan starts. User provisioning is an operational
-> prerequisite — it is not something the scan config manages. The global
-> `before` is for creating shared resources, or extracting shared
-> runtime variables that multiple operations need during the scan (e.g. a
-> resource ID or session value returned by a setup call). If you need a fresh
-> user per-iteration for a specific operation, use the Class-D throwaway-user
-> pattern on that operation's own `before` block instead.
+need `customerId` from a login call), use the **Global `before` block** pattern
+from `./scanconf-templates.md` rather than repeating the creator in every
+scenario. **Never use the global `before` to register or provision test
+users** — the scan assumes User 1, User 2, and Admin already exist before it
+starts; see the warning attached to that pattern.
 
 ### Class-C: user-provided data
 
@@ -782,221 +614,53 @@ block. If the operation is not in the table, ask the user to paste the values.
 
 ### Class-D: throwaway-user pattern
 
-For operations that delete the primary user's own account, the throwaway
-credential must be fully defined in `authenticationDetails` and the operation
-must reference it directly. The operation's `before` block registers the
-throwaway user before each iteration, so the scenario only needs to delete it.
+For operations that delete the primary user's own account, apply the
+**Class-D — throwaway user** pattern from `./scanconf-templates.md` in full.
+Four elements are all mandatory:
 
-**Step A — Add the register step to the operation's `before` block**
+1. **Register step in the operation's `before` block** — so the throwaway user
+   exists before each scenario iteration; accept both 201 (created) and 409
+   (already exists — idempotent).
+2. **Named throwaway credential in `authenticationDetails`** — login
+   acquisition step only (see the `<throwaway-credential-name>` entry in the
+   templates' `authenticationDetails` pattern).
+3. **`auth` pinned on the operation definition itself** —
+   `"auth": ["AccessToken/<throwaway-credential-name>"]` on the operation's
+   `request` block, never as a scenario-step override. This guarantees User1
+   is never touched.
+4. **Delete-only 1-step scenario** — do NOT re-register in the scenario; the
+   `before` block already re-registers before every iteration.
 
-Add the register operation to the `before` block of the Class-D operation so
-the throwaway user exists before each scenario iteration. Accept both 201
-(created) and 409 (already exists — idempotent):
+If the register operation rejects existing accounts (no 409 tolerance), add an
+idempotent pre-cleanup utility request per the templates' **`requests` — named
+utility request** section: login as the throwaway → delete any pre-existing
+account → the register step always finds a clean slate.
 
-```json
-"before": [
-  {
-    "$ref": "#/operations/<RegisterOperationId>/request",
-    "environment": {
-      "<emailVar>": "<throwaway@example.com>",
-      "<credentialVar>": "<throwawayCredential>"
-    },
-    "responses": {
-      "201": { "expectations": { "httpStatus": 201 } },
-      "409": { "expectations": { "httpStatus": 409 } }
-    }
-  }
-]
-```
+### BOLA / BFLA authorization test patterns
 
-Then, inside the `AccessToken` credentials map, add a named throwaway entry
-with only the login acquisition step:
+Apply the **`authorizationTests` — BOLA and BFLA** section of
+`./scanconf-templates.md`:
 
-```json
-"<throwaway-credential-name>": {
-  "credential": "{{AccessToken}}",
-  "requests": [
-    {
-      "$ref": "#/operations/<LoginOperationId>/request",
-      "environment": {
-        "<emailVar>": "<throwaway@example.com>",
-        "<credentialVar>": "<throwawayCredential>"
-      },
-      "responses": {
-        "200": {
-          "expectations": { "httpStatus": 200 },
-          "variableAssignments": {
-            "AccessToken": {
-              "in": "body", "from": "response", "contentType": "json",
-              "path": { "type": "jsonPointer", "value": "/<tokenField>" }
-            }
-          }
-        }
-      }
-    }
-  ]
-}
-```
+- **BOLA** — for every operation marked `BOLA? = yes` in the Step 5 table:
+  define the `authentication-swapping-bola` test once at the top level
+  (source `User1Token` → target `User2Token`), then tag each candidate
+  operation's `authorizationTests` array.
+- **BFLA** — for every operation flagged as a BFLA candidate (privileged /
+  admin-only): define the `authentication-swapping-bfla` test once (source
+  `AdminToken` → target `User1Token`), tag each candidate, **and pin the
+  operation's `auth` to the admin credential on its request definition**
+  (mandatory — the baseline happy path must run as admin so the test is a
+  true admin→low-privilege swap).
 
-**Step B — Set `auth` on the operation definition itself**
+No additional scenario block is needed for either test — the scanner replays
+the operation's `happy.path` scenario (including its `before` blocks and all
+`scenarios[].requests[]` steps) with the swapped credential.
 
-Use `Scheme/CredentialName` notation directly on the operation's `request`
-block — not as a scenario-step override:
-
-```json
-"<DeleteSelfOperationId>": {
-  "operationId": "<DeleteSelfOperationId>",
-  "request": {
-    "operationId": "<DeleteSelfOperationId>",
-    "auth": ["AccessToken/<throwaway-credential-name>"],
-    "request": { ... }
-  },
-  ...
-}
-```
-
-**Step C — Build a 1-step scenario: delete only**
-
-The throwaway user is already registered in the operation's `before` block
-(Step A), which runs before every scenario iteration. There is no need to
-re-register after deletion — the `before` block handles that automatically.
-
-```json
-"scenarios": [
-  {
-    "key": "happy.path",
-    "fuzzing": true,
-    "requests": [
-      {
-        "fuzzing": true,
-        "$ref": "#/operations/<DeleteSelfOperationId>/request"
-      }
-    ]
-  }
-]
-```
-
-The operation's `auth` field ensures only the throwaway credential is used —
-User1 is never touched. Before each subsequent iteration, the operation's
-`before` block re-registers the throwaway user so the `authenticationDetails`
-login step can always acquire a fresh token.
-
-**Step D — Add a utility request for idempotent pre-cleanup (optional)**
-
-If the register operation rejects existing accounts (no 409 tolerance), add a
-named utility request to the `requests` section that deletes any pre-existing
-throwaway account, then reference it in the register operation's `before` block:
-
-```json
-"requests": {
-  "<DeleteThrowawayUtil>": {
-    "request": {
-      "type": "42c",
-      "details": {
-        "method": "DELETE",
-        "url": "{{host}}<delete-path>",
-        "headers": [{ "key": "Authorization", "value": "Bearer {{AccessToken}}" }]
-      }
-    },
-    "defaultResponse": "200",
-    "responses": { "200": { "expectations": { "httpStatus": 200 } } }
-  }
-}
-```
-
-Then in the register operation's `before` block: login as the throwaway → call
-`<DeleteThrowawayUtil>` → the register step in the happy path always finds a
-clean slate.
-
-### BOLA authorization test pattern (BOLA? = yes operations)
-
-For every operation marked `BOLA? = yes` in the Step 5 table, register it
-with the top-level `authorizationTests` entry. The scanner replaces the
-source credential with the target credential on an otherwise identical
-execution of the operation's `happy.path` scenario — including any `before`
-blocks on that operation **and** all steps in `scenarios[].requests[]`.
-
-> **DELETE operations:** ensure the creator step is the first request inside
-> `happy.path` (see Step 6 — DELETE Class-B operations). A creator-only `before`
-> block with a single-step delete scenario commonly causes false BOLA failures
-> (404 instead of 403).
-
-**Step 1 — Define the authorization test (once, top-level):**
-
-```json
-"authorizationTests": {
-  "<BolaTestName>": {
-    "key": "authentication-swapping-bola",
-    "source": ["<SchemeName>/User1Token"],
-    "target": ["<SchemeName>/User2Token"]
-  }
-}
-```
-
-**Step 2 — Tag each BOLA candidate operation:**
-
-```json
-"<TargetOperationId>": {
-  "operationId": "<TargetOperationId>",
-  "authorizationTests": ["<BolaTestName>"],
-  ...
-}
-```
-
-No additional scenario block is needed. The scanner runs the BOLA test by
-replaying the operation's `happy.path` scenario using User 2's token.
-
-A 2xx response on the BOLA authorization test is a confirmed BOLA finding.
-A 401 or 403 means the server enforces ownership — not a finding.
-
-### BFLA authorization test pattern (BFLA candidates)
-
-For every operation flagged as a BFLA candidate (privileged / admin-only),
-register it with a BFLA entry in `authorizationTests`. The scanner replaces
-the admin credential with the low-privilege credential on an otherwise
-identical execution of the operation's happy path.
-
-**Mandatory auth pinning for privileged operations:**
-Set the privileged operation's auth to the admin credential on the operation
-request definition itself. This ensures the baseline happy path executes as
-admin and the BFLA test is a true credential swap from admin to low-privilege.
-
-```json
-"<PrivilegedOperationId>": {
-  "operationId": "<PrivilegedOperationId>",
-  "request": {
-    "operationId": "<PrivilegedOperationId>",
-    "auth": ["<SchemeName>/AdminToken"],
-    "request": { ... }
-  },
-  ...
-}
-```
-
-**Step 1 — Define the authorization test (once, top-level):**
-
-```json
-"authorizationTests": {
-  "<BflaTestName>": {
-    "key": "authentication-swapping-bfla",
-    "source": ["<SchemeName>/AdminToken"],
-    "target": ["<SchemeName>/User1Token"]
-  }
-}
-```
-
-**Step 2 — Tag each BFLA candidate operation:**
-
-```json
-"<PrivilegedOperationId>": {
-  "operationId": "<PrivilegedOperationId>",
-  "authorizationTests": ["<BflaTestName>"],
-  ...
-}
-```
-
-No additional scenario block is needed. A 2xx response on the BFLA
-authorization test is a confirmed BFLA finding.
+**Result semantics:** a 2xx response on the authorization test is a
+**confirmed BOLA/BFLA finding**; 401/403 means the server enforces
+authorization — not a finding. For DELETE operations, ensure the creator is
+scenario-inline per the placement table above — a creator-only `before` block
+commonly causes false BOLA failures (404 instead of 403).
 
 ## Step 7 — Scan Config Validation Checkpoint
 

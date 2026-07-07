@@ -1,6 +1,13 @@
 ## Scanconf Template
 
-Generic structural reference for `scanconf.json` (version 2.0.0). Use this when building or repairing a config manually. Replace every `<placeholder>` with the API-specific value. Omit `authorizationTests` when no BOLA/BFLA candidates exist; omit `requests` when no standalone utility requests are needed.
+**Canonical pattern library** for `scanconf.json` (version 2.0.0). Every JSON
+shape used by `scan-workflow.md` Steps 2–6 (credential acquisition, operation
+patterns, dependency chains, authorization tests) is defined here and only
+here — the workflow file names the pattern to apply; this file is the single
+source of truth for its JSON. Also use this file when building or repairing a
+config manually. Replace every `<placeholder>` with the API-specific value.
+Omit `authorizationTests` when no BOLA/BFLA candidates exist; omit `requests`
+when no standalone utility requests are needed.
 
 ### Top-level skeleton
 
@@ -108,7 +115,12 @@ Credential variable example:
 
 Same as above but add `"auth": ["AccessToken"]` inside the outer `request` object (alongside `operationId` and `request`). No `before` block needed.
 
-#### Class-B — dependency chain (operation needs an ID from a prior response)
+#### Class-B — dependency chain, GET / PUT / PATCH (creator in `before` block)
+
+Use when the operation needs an ID from a prior response and the happy path
+does **not** destroy the resource. The creator lives in the operation-level
+`before` block; the `happy.path` scenario is a single step. (For DELETE
+targets, use the next pattern instead.)
 
 **Required:** if the referenced creator operation contains template variables in
 its request (path/query/header/body), the `before` step must resolve
@@ -166,6 +178,93 @@ available here. Each `before` chain must be independently runnable unless the
 variable is intentionally resolved at the global level.
 
 To add a BOLA authorization test, append `"authorizationTests": ["<BolaTestName>"]` at the operation level.
+
+#### Class-B — dependency chain, DELETE (creator inside the scenario)
+
+Use when the Class-B **target operation is DELETE** and the happy path destroys
+the resource (especially when `BOLA? = yes`). Put the creator operation as the
+**first request** in `scenarios[].requests[]`, immediately before the delete
+`$ref` — do **not** put the creator only in the operation-level `before` block
+with a single-step delete scenario.
+
+**Why:** BOLA replays the operation's `happy.path` scenario with User 2's
+credential swapped onto the delete step. If User 1's happy path already deleted
+the resource — or the creator in `before` does not reliably re-seed it before
+the BOLA replay — the authorization test returns **404 Not Found** instead of
+the expected **401/403**, producing a false BOLA failure even when the API
+correctly enforces ownership.
+
+```json
+"<DeleteOperationId>": {
+  "operationId": "<DeleteOperationId>",
+  "request": { ... },
+  "scenarios": [
+    {
+      "key": "happy.path",
+      "fuzzing": true,
+      "requests": [
+        {
+          "$ref": "#/operations/<CreatorOperationId>/request",
+          "environment": {
+            "<creatorVar1>": "<value1>"
+          }
+        },
+        {
+          "fuzzing": true,
+          "$ref": "#/operations/<DeleteOperationId>/request"
+        }
+      ]
+    }
+  ],
+  "authorizationTests": ["<BolaTestName>"]
+}
+```
+
+The `<varName>` captured from the creator's response (via `variableAssignments`
+on the creator operation definition, or inline on the scenario step) is then
+referenced as `{{varName}}` in the delete operation's `paths` or `queries`
+array.
+
+**Expected BOLA replay flow (DELETE):** creator runs as User 1 → sets
+`{{resourceId}}`; delete runs as User 2 → API returns 403 if ownership is
+enforced (not a finding). **Symptom of wrong placement:**
+`authentication-swapping-bola` failure with HTTP 404 / "not found" on a
+DELETE — restructure to this scenario-inline shape and re-test.
+
+#### Global `before` block (shared dependencies)
+
+If multiple operations share the same dependency variable (e.g. many operations
+need `customerId` from a login call), add the creator to the top-level global
+`before` block rather than repeating it in every scenario:
+
+```json
+"before": [
+  {
+    "$ref": "#/operations/<AuthOp>/request",
+    "responses": {
+      "200": {
+        "expectations": { "httpStatus": 200 },
+        "variableAssignments": {
+          "customerId": {
+            "in": "body", "from": "response", "contentType": "json",
+            "path": { "type": "jsonPointer", "value": "/user/customerId" }
+          }
+        }
+      }
+    }
+  }
+]
+```
+
+> **Do NOT use the global `before` block to register or provision test users.**
+> The scan assumes all test users (User 1, User 2, Admin) already exist in
+> the database before the scan starts. User provisioning is an operational
+> prerequisite — it is not something the scan config manages. The global
+> `before` is for creating shared resources, or extracting shared
+> runtime variables that multiple operations need during the scan (e.g. a
+> resource ID or session value returned by a setup call). If you need a fresh
+> user per-iteration for a specific operation, use the Class-D throwaway-user
+> pattern on that operation's own `before` block instead.
 
 #### Resource-restoring `after` block (non-self-destructive deletes)
 
@@ -409,8 +508,21 @@ To add a BOLA authorization test, append `"authorizationTests": ["<BolaTestName>
 }
 ```
 
-For each privileged operation included in the BFLA test, pin the operation's
-auth to the admin credential in the operation request definition:
+Define each test **once** at the top level, then tag every candidate operation
+by appending the test name to its operation-level `authorizationTests` array:
+
+```json
+"<TargetOperationId>": {
+  "operationId": "<TargetOperationId>",
+  "authorizationTests": ["<BolaTestName>"],
+  ...
+}
+```
+
+For each privileged operation included in the BFLA test, additionally pin the
+operation's auth to the admin credential in the operation request definition
+(mandatory — the baseline happy path must run as admin so the BFLA test is a
+true admin→low-privilege swap):
 
 ```json
 "<PrivilegedOperationId>": {
@@ -423,6 +535,15 @@ auth to the admin credential in the operation request definition:
   "authorizationTests": ["<BflaTestName>"]
 }
 ```
+
+No additional scenario block is needed for either test — the scanner replays
+the operation's `happy.path` scenario (including its `before` blocks and all
+`scenarios[].requests[]` steps) with the swapped credential.
+
+**Result semantics:** a 2xx response on the authorization test is a
+**confirmed BOLA/BFLA finding**. A 401 or 403 means the server enforces
+authorization — not a finding. (A 404 on a DELETE usually means the creator
+step is misplaced — see the Class-B DELETE pattern above.)
 
 ---
 
@@ -508,6 +629,7 @@ The key difference from an OAS-operation reference (`"$ref": "#/operations/<Oper
 | BFLA-candidate privileged operations must set operation-level auth to `"<SchemeName>/AdminToken"` (for example `"AccessToken/AdminToken"`) | Ensures happy path runs with admin privileges and BFLA swapping tests demote to low-privilege users |
 | `environment` overrides in a step apply only to that step | Safe credential/variable swap without duplicating the operation |
 | For Class-B/Class-D creator calls, use step-level `environment` overrides unless variables are already resolved globally (`environments.default.variables`, global static defaults, or global `before` assignments) | Prevents unresolved template variables while allowing intentional global wiring |
+| Class-B DELETE: creator goes scenario-inline (first request in `happy.path`), never `before`-only | BOLA replay must seed a live resource; a `before`-only creator causes false 404 BOLA failures |
 | Never use `"skipped": true` on Class-D operations | The scanner ignores it and deletes the primary user, breaking subsequent tests |
 | Never override the token variable via `environment` to swap credentials on a Class-D operation | `authenticationDetails` tokens are cached at session start; environment overrides do not change which cached token is injected |
 | Class-D operations: set `"auth": ["AccessToken/<throwaway>"]` on the operation definition, not as a scenario-step override | The credential must be pinned at the operation level so the scanner uses the throwaway for ALL execution paths — happy path, fuzzing, and authorization tests |

@@ -24,20 +24,62 @@ reconfiguration, since):
   the last run) → run all steps in order starting from Step 1.
 
 This is a same-conversation shortcut only. It does not apply across separate
-conversations — Step 1 has its own cross-session cache (see `binary-setup.md`).
+conversations — Step 1 has its own cross-session cache (the `.preflight-cache`
+check inlined below).
 
 ---
 
 ## Step 1 — Binary Check
 
-Resolve the canonical binary path for the current OS:
-- macOS/Linux: `$HOME/.42crunch/bin/42c-ast`
-- Windows: `%APPDATA%\42Crunch\bin\42c-ast.exe`
+Announce: `"Checking for 42c-ast..."` then classify the binary state with one
+command — do **not** read `./binary-setup.md` yet:
 
-Announce: `"Checking for 42c-ast..."`
+```bash
+# macOS / Linux
+BINARY_PATH="$HOME/.42crunch/bin/42c-ast"
+CACHE_FILE="$HOME/.42crunch/conf/.preflight-cache"
+TTL="${PREFLIGHT_CACHE_TTL_SECONDS:-86400}"
+if [ ! -x "$BINARY_PATH" ]; then
+  echo "BINARY=missing"
+elif CHECKED_AT=$(grep '^CHECKED_AT=' "$CACHE_FILE" 2>/dev/null | cut -d= -f2) \
+  && [ -n "$CHECKED_AT" ] && [ $(( $(date +%s) - CHECKED_AT )) -lt "$TTL" ] \
+  && "$BINARY_PATH" --version >/dev/null 2>&1; then
+  echo "BINARY=fresh"
+else
+  echo "BINARY=check"
+fi
+```
 
-- **Missing** → announce `"The 42c-ast binary isn't installed yet — running setup now."` then invoke `42crunch-setup` as a **subroutine** (pass caller context: `pre-flight`). Do not proceed if setup fails. On success, continue to Step 2.
-- **Present** → silently follow `./binary-setup.md` (silent mode — see Caller Verbosity section in that file). The only output is `"42c-ast updated from vX to vY."` if an update was applied. If the manifest is unreachable, announce: `"Could not reach the update server — continuing with installed 42c-ast v<version>."` then continue.
+```powershell
+# Windows
+$BinaryPath = "$env:APPDATA\42Crunch\bin\42c-ast.exe"
+$CacheFile = "$env:APPDATA\42Crunch\conf\.preflight-cache"
+$Ttl = if ($env:PREFLIGHT_CACHE_TTL_SECONDS) { [int]$env:PREFLIGHT_CACHE_TTL_SECONDS } else { 86400 }
+if (-not (Test-Path $BinaryPath)) { "BINARY=missing" }
+else {
+  $fresh = $false
+  $line = Select-String -Path $CacheFile -Pattern '^CHECKED_AT=' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($line) {
+    $CheckedAt = [int]($line.Line -replace '^CHECKED_AT=', '')
+    $Now = [int][double]::Parse((Get-Date -UFormat %s))
+    if (($Now - $CheckedAt) -lt $Ttl) {
+      & $BinaryPath --version *> $null
+      if ($LASTEXITCODE -eq 0) { $fresh = $true }
+    }
+  }
+  if ($fresh) { "BINARY=fresh" } else { "BINARY=check" }
+}
+```
+
+- **`BINARY=fresh`** → binary present, verified against the manifest within
+  the cache TTL, and runs. Skip `./binary-setup.md` entirely — do not read
+  it — and continue to Step 2.
+- **`BINARY=check`** → binary present but the cache is missing or stale.
+  Silently follow `./binary-setup.md` (silent mode — see Caller Verbosity
+  section in that file). The only output is `"42c-ast updated from vX to vY."`
+  if an update was applied. If the manifest is unreachable, announce:
+  `"Could not reach the update server — continuing with installed 42c-ast v<version>."` then continue to Step 2.
+- **`BINARY=missing`** → announce `"The 42c-ast binary isn't installed yet — running setup now."` then invoke `42crunch-setup` as a **subroutine** (pass caller context: `pre-flight`). Do not proceed if setup fails. On success, continue to Step 2.
 
 ---
 
