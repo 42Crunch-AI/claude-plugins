@@ -19,7 +19,7 @@ must not enter any command, tool output, or chat message:
 # macOS / Linux
 ENV_FILE="$HOME/.42crunch/conf/env"
 if grep -q '^TRIAL_TOKEN=' "$ENV_FILE" 2>/dev/null; then
-  echo "MODE=freetrial"
+  echo "MODE=token"
   grep -oE '^TRIAL_TOKEN=.{4}' "$ENV_FILE" | sed 's/^TRIAL_TOKEN=/PREFIX=/'
 elif grep -qE '^API_KEY=(api_|ide_)' "$ENV_FILE" 2>/dev/null; then
   echo "MODE=platform"
@@ -36,7 +36,7 @@ fi
 $EnvFile = "$env:APPDATA\42Crunch\conf\env"
 if (Select-String -Path $EnvFile -Pattern '^TRIAL_TOKEN=(.{4})' -ErrorAction SilentlyContinue |
     Select-Object -First 1 -OutVariable m) {
-  Write-Output "MODE=freetrial"
+  Write-Output "MODE=token"
   Write-Output ("PREFIX=" + $m[0].Matches[0].Groups[1].Value)
 } elseif (Select-String -Path $EnvFile -Pattern '^API_KEY=(api_|ide_)' -ErrorAction SilentlyContinue |
     Select-Object -First 1 -OutVariable m) {
@@ -51,13 +51,20 @@ if (Select-String -Path $EnvFile -Pattern '^TRIAL_TOKEN=(.{4})' -ErrorAction Sil
 
 **Mode detection from the output:**
 
-- `MODE=freetrial` → **Token mode** (covers Free Trial, Individual, Individual Pro, Team 10, and Team 25 — they all use the same personal access token)
-- `MODE=platform` → **Platform mode** (Enterprise)
+- `MODE=token` → **Token mode** (covers Starter (Free Trial), Individual, and Individual Pro — they all use the same personal access token)
+- `MODE=platform` → **Platform mode** (Team 10, Team 25, and Enterprise — a Platform account with an API key)
 - `MODE=badformat` / `MODE=none` → no usable credential found; proceed to Step 2 as if none exists.
 
-**If `MODE=freetrial` or `MODE=platform`** (a credential is found), call `AskUserQuestion`:
-- **question**: `"Credentials already configured in ~/.42crunch/conf/env — running in <mode> mode. Key: <masked>. Would you like to keep the existing credentials or replace them?"`
-- **options**: `["Keep existing credentials", "Replace credentials"]`
+**If `MODE=token` or `MODE=platform`** (a credential is found):
+
+- **Called as a subroutine** (caller context is set — e.g. `pre-flight` only
+  needed a binary install): keep the existing credentials automatically.
+  Announce `"Existing <mode> credentials found (<masked>) — keeping them."`
+  and finish — **credential setup complete**. Do not ask the keep-or-replace
+  question; the caller needed the environment completed, not re-credentialed.
+- **Called directly by the user**: call `AskUserQuestion`:
+  - **question**: `"Credentials already configured in ~/.42crunch/conf/env — running in <mode> mode. Key: <masked>. Would you like to keep the existing credentials or replace them?"`
+  - **options**: `["Keep existing credentials", "Replace credentials"]`
 
 Build `<masked>` directly from `PREFIX` — never from the full secret:
 `api_••••••••` / `ide_••••••••` for platform tokens; `<PREFIX>••••••••` for
@@ -72,20 +79,20 @@ If replacing → continue to Step 2.
 
 Call `AskUserQuestion`:
 - **question**: `"Do you have a 42Crunch Subscription?"`
-- **options**: `["No — I want to subscribe to a Free Trial", "Yes — I have a subscription (or an existing Free Trial account)"]`
+- **options**: `["No — I want to subscribe to the Starter (Free Trial) plan", "Yes — I have a subscription (or an existing Starter (Free Trial) account)"]`
 
 **If No** — continue to Path C.
 
 **If Yes** — call `AskUserQuestion`:
-- **question**: `"Is it a token (Free Trial, Individual, Individual Pro, or Team) or an Enterprise Platform account?"`
-- **options**: `["Token", "Enterprise Platform account"]`
+- **question**: `"Is it a token-based plan (Starter (Free Trial), Individual, or Individual Pro) or a Platform account with an API key (Team 10, Team 25, or Enterprise)?"`
+- **options**: `["Token", "Platform account (API key)"]`
 
 - **Token** chosen → continue to Path B.
-- **Enterprise Platform account** chosen → continue to Path A.
+- **Platform account (API key)** chosen → continue to Path A.
 
 ---
 
-### Path A — Enterprise (Platform mode)
+### Path A — Platform mode (Team 10, Team 25, Enterprise)
 
 Call `AskUserQuestion`:
 - **question**: `"Please enter your API Key (it usually starts with api_ or ide_):"`
@@ -102,7 +109,7 @@ Store values as `API_KEY` and `PLATFORM_HOST`. Continue to Step 3.
 
 ---
 
-### Path B — Token-based (Free Trial, Individual, Individual Pro, Team)
+### Path B — Token-based (Starter (Free Trial), Individual, Individual Pro)
 
 Call `AskUserQuestion`:
 - **question**: `"Please paste your token (it's a long Base64 string):"`
@@ -116,7 +123,7 @@ Wait for input. Store value as `TRIAL_TOKEN`. Continue to Step 3.
 Inform the user:
 > No problem — getting a free account takes a minute.
 >
-> 1. Visit **[42Crunch Free Trial](https://42crunch.com/freemium/?source=claude)**.
+> 1. Visit **[42Crunch Starter (Free Trial)](https://42crunch.com/freemium/?source=claude)**.
 > 2. Fill in your email address, accept terms and conditions and click Submit.
 > 3. Check your inbox for a confirmation email that includes your token.
 >
@@ -124,8 +131,8 @@ Inform the user:
 > **[42Crunch Pricing](https://42crunch.com/pricing/)** to choose one:
 > - **Individual** — 1,000 Security Tokens / month, same token-based setup you'd use here.
 > - **Individual Pro** — 3,000 Security Tokens / month, same token-based setup.
-> - **Team 10** — unlimited Security Tokens for teams of up to 10, same token-based setup.
-> - **Team 25** — unlimited Security Tokens for teams of up to 25, same token-based setup.
+> - **Team 10** — unlimited Security Tokens for teams of up to 10. Uses a Platform account with an API key instead of a token.
+> - **Team 25** — unlimited Security Tokens for teams of up to 25. Uses a Platform account with an API key instead of a token.
 > - **Enterprise** — for teams and companies needing CI/CD integration, API Protection, and more. Uses a company Platform account with an API key instead of a token.
 >
 > When you're ready, just say "continue" or "I have my token" and I'll pick up
@@ -134,11 +141,11 @@ Inform the user:
 **Stop — do not proceed.** Credential setup is incomplete. Do not write any credentials file.
 
 **On resume** (user says "continue" or similar): call `AskUserQuestion`:
-- **question**: `"Did you sign up for a Free Trial/token-based plan, or an Enterprise account?"`
-- **options**: `["Token-based (Free Trial, Individual, Individual Pro, or Team)", "Enterprise"]`
+- **question**: `"Did you sign up for a token-based plan, or a plan that uses a Platform account?"`
+- **options**: `["Token-based (Starter (Free Trial), Individual, or Individual Pro)", "Platform account (Team 10, Team 25, or Enterprise)"]`
 
 - **Token-based** chosen → continue to Path B.
-- **Enterprise** chosen → continue to Path A.
+- **Platform account** chosen → continue to Path A.
 
 ---
 
@@ -204,18 +211,19 @@ chmod 600 "$HOME/.42crunch/conf/env"
 
 Skip on Windows — `APPDATA` is already protected by Windows ACLs.
 
-**Clear the trial-expired sentinel, if present.** Any successful write here —
+**Clear the token-limit sentinel, if present.** Any successful write here —
 regardless of which mode it resolves to — means the account state has just
-changed, so a previously-recorded "expired" state no longer applies:
+changed, so a previously-recorded limit state no longer applies. Remove both
+the current sentinel name and the legacy one written by older plugin versions:
 
 ```bash
 # macOS / Linux
-rm -f "$HOME/.42crunch/conf/.trial-expired"
+rm -f "$HOME/.42crunch/conf/.token-limit" "$HOME/.42crunch/conf/.trial-expired"
 ```
 
 ```powershell
 # Windows
-Remove-Item "$env:APPDATA\42Crunch\conf\.trial-expired" -ErrorAction SilentlyContinue
+Remove-Item "$env:APPDATA\42Crunch\conf\.token-limit","$env:APPDATA\42Crunch\conf\.trial-expired" -ErrorAction SilentlyContinue
 ```
 
 ---

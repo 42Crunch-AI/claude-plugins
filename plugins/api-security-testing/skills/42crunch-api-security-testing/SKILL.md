@@ -59,6 +59,9 @@ explicit user permission before execution.
    - BOLA candidate count: operations where the path has `{…Id}`, `{…Key}`, `{…Ref}`, or similar resource-ID placeholders AND the method is GET, PUT, PATCH, or DELETE
    - Whether the OAS contains sample data: any operation with `example`, `examples`, or `default` values on its request body or parameter schemas
 
+   Carry these results forward — `scan-workflow.md` reuses them in its auth
+   setup, test-data, and classification steps instead of re-reading the OAS.
+
 6. **Ask for Phase 2 permission.** Output the following scan preview as a chat
    message first:
 
@@ -69,7 +72,7 @@ explicit user permission before execution.
      Auth:     <scheme types>  [+  second user needed — <N> BOLA candidate(s)]
      Samples:  OAS has sample data  /  No samples — you'll need to provide test data
      Tag:      <category>:<tagname>           ← platform mode only, when a tag is assigned; omit if no tag
-     Mode:     Platform / Free Trial
+     Mode:     Platform / Token
    ```
 
    Then call `AskUserQuestion`:
@@ -128,19 +131,19 @@ After both phases complete, produce a summary in this shape:
 Phase 1 — Audit Complete
   Score:          <score> / 100  (Security: <sec-score> · Data Validation: <data-score>)
   Score change:   <initial-score> → <score>  (<delta>)  |  Data: <initial-data> → <data-score>  (<data-delta>)   ← omit if no fixes applied
-  Mode:           Platform                          ← or "Free Trial"
+  Mode:           Platform                          ← or "Token"
   SQG:            PASSED  (<sqg-name> — your org's security quality gate is met)     ← platform mode, passed
   SQG:            FAILED  (<sqg-name> — the quality gate is not met; fixes above are required)    ← platform mode, failed
-  SQG:            N/A  (Free Trial — no automated gate; user-defined thresholds applied this session)    ← free trial mode
+  SQG:            N/A  (Token mode — no automated gate; user-defined thresholds applied this session)    ← token mode
   Tag:            <category>:<tagname>              ← platform mode only, when a tag is assigned; omit this row if no tag
   Issues fixed:   2 SQG-blocking  (0 security · 2 data validation)
   OAS updated:    <path/to/openapi.json>
 
 Phase 2 — Scan Complete
-  Mode:           Platform                          ← or "Free Trial"
+  Mode:           Platform                          ← or "Token"
   SQG:            PASSED  (<sqg-name> — your org's security quality gate is met)    ← platform mode, passed
   SQG:            FAILED  (<sqg-name> — the quality gate is not met; fixes above are required)    ← platform mode, failed
-  SQG:            N/A  (Free Trial — scan findings are informational; no gate enforced)    ← free trial mode
+  SQG:            N/A  (Token mode — scan findings are informational; no gate enforced)    ← token mode
   Authorization:  BOLA confirmed on 1 operation — OAS updated · server-side fix applied
   Conformance:    1 SQG-blocking issue fixed (OAS + code) · 3 informational findings surfaced
   OAS updated:    <path/to/openapi.json>

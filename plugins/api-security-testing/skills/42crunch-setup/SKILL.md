@@ -39,7 +39,7 @@ explain what they'll be able to do once setup is complete:
 >
 > I'll handle this in two quick steps:
 > 1. Install the `42c-ast` analysis binary on this machine.
-> 2. Connect your 42Crunch credentials (a token from Free Trial / Individual / Individual Pro, or a Platform account with an API key for Team 10 / Team 25 / Enterprise).
+> 2. Connect your 42Crunch credentials (a token from Starter (Free Trial) / Individual / Individual Pro, or a Platform account with an API key for Team 10 / Team 25 / Enterprise).
 >
 > Let's go.
 
@@ -61,15 +61,21 @@ The procedure covers, in order:
   (Windows). If already configured: show mode + masked key, offer to keep or replace.
 - If not configured (or replacing): walk the user through the guided flow:
   - **Do you have a 42Crunch Subscription?**
-    - No → show Free Trial registration link (`[42Crunch Free Trial](https://42crunch.com/freemium/?source=claude)`) and the paid-plans pricing breakdown (Individual / Individual Pro use a token; Team 10 / Team 25 / Enterprise use a Platform account with an API key); stop and wait for the user to return, then ask token vs Platform-API-key and route accordingly
+    - No → show Starter (Free Trial) registration link (`[42Crunch Starter (Free Trial)](https://42crunch.com/freemium/?source=claude)`) and the paid-plans pricing breakdown (Individual / Individual Pro use a token; Team 10 / Team 25 / Enterprise use a Platform account with an API key); stop and wait for the user to return, then ask token vs Platform-API-key and route accordingly
     - Yes → **Do you have a token, or a Platform account with an API key?**
-      - Token (Free Trial / Individual / Individual Pro) → enter token
+      - Token (Starter (Free Trial) / Individual / Individual Pro) → enter token
       - Platform API key (Team 10 / Team 25 / Enterprise) → enter API Key → select Platform URL (US / EU / Other)
 - Write credentials to `~/.42crunch/conf/env`, set `chmod 600` on macOS/Linux.
 
 ### Step 4 — Final verification
 
-Run a quick end-to-end check:
+Steps 2 and 3 already end with their own verification: `binary-setup.md`
+confirms `--version` exits 0, and `credential-setup.md` Step 4 confirms the
+credential line is present. If both results are already in this conversation,
+do **not** re-run those commands — reuse the results and continue to Step 5.
+
+Only run the checks below for a part whose result is missing from this
+conversation. The credential check is presence-only — never print the value:
 
 ```bash
 # Binary (macOS / Linux)
@@ -83,12 +89,12 @@ Run a quick end-to-end check:
 
 ```bash
 # Credentials (macOS / Linux)
-grep -E "^(API_KEY|TRIAL_TOKEN)=" "$HOME/.42crunch/conf/env"
+grep -qE "^(API_KEY|TRIAL_TOKEN)=" "$HOME/.42crunch/conf/env" && echo "CREDS=OK" || echo "CREDS=MISSING"
 ```
 
 ```powershell
 # Credentials (Windows)
-Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(API_KEY|TRIAL_TOKEN)="
+if (Select-String -Path "$env:APPDATA\42Crunch\conf\env" -Pattern "^(API_KEY|TRIAL_TOKEN)=" -Quiet) { "CREDS=OK" } else { "CREDS=MISSING" }
 ```
 
 If either check fails, report the specific failure and guide the user to resolve
@@ -163,4 +169,4 @@ off.
 |-----------------|----------------------------------|-----------------|
 | `API_KEY`       | *(required)*                     | Platform (Team 10 / Team 25 / Enterprise) |
 | `PLATFORM_HOST` | *(set during setup)*             | Platform only (Team 10 / Team 25 / Enterprise) |
-| `TRIAL_TOKEN`   | *(required)*                     | Token-based (Free Trial / Individual / Individual Pro) |
+| `TRIAL_TOKEN`   | *(required)*                     | Token-based (Starter (Free Trial) / Individual / Individual Pro) |

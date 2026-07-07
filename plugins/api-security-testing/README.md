@@ -20,7 +20,7 @@ The `42crunch-api-security-testing` plugin is designed for AI-assisted developme
 ## Prerequisites
 
 - [Claude Code](https://claude.ai/code) (CLI, desktop app, or IDE extension)
-- A 42Crunch account — [Free Trial](https://42crunch.com/freemium/?source=claude), a paid token-based plan (Individual, Individual Pro, or Team), or an Enterprise Platform account
+- A 42Crunch account — [Starter (Free Trial)](https://42crunch.com/freemium/?source=claude), a paid token-based plan (Individual or Individual Pro), or a Platform account with an API key (Team 10, Team 25, or Enterprise)
 - For `42crunch-scan`: a running API server reachable at the URL in `servers[0]` of your OAS (or via `SCAN42C_HOST`)
 
 The `42c-ast` binary is downloaded and kept up to date automatically on first use.
@@ -63,7 +63,7 @@ See [RECIPES.md](./RECIPES.md) for step-by-step guides covering the most common 
 
 ### `42crunch-setup`
 
-Installs the `42c-ast` binary for your OS/architecture, verifies its checksum, and walks you through credential configuration. Supports Platform (Enterprise) and Token (Free Trial, Individual, Individual Pro, Team) modes. Credentials are stored in `~/.42crunch/conf/env` with `600` permissions.
+Installs the `42c-ast` binary for your OS/architecture, verifies its checksum, and walks you through credential configuration. Supports Platform (Team 10, Team 25, Enterprise) and Token (Starter (Free Trial), Individual, Individual Pro) modes. Credentials are stored in `~/.42crunch/conf/env` with `600` permissions.
 
 > **Trigger:** "set up 42crunch", "configure 42crunch", "install 42c-ast", "update 42c-ast", "set api key", "42crunch not working", "binary not found"
 
@@ -86,7 +86,7 @@ Runs a static analysis of an OpenAPI Specification and produces a 0–100 securi
 Claude asks your explicit consent before applying any changes, then re-runs the audit to confirm passage.
 
 **Platform mode:** SQG threshold enforced from your platform policy.  
-**Free Trial mode:** No automated SQG gate; you set the target score and blocking severity for the session.
+**Token mode:** No automated SQG gate; you set the target score and blocking severity for the session.
 
 > **Trigger:** "run audit", "42crunch audit", "fix audit issues", "SQG audit", "audit score"
 
@@ -113,7 +113,7 @@ Findings are classified into three tiers:
 Claude asks your consent before applying any fixes — both OAS contract updates and server-side code changes.
 
 **Platform mode:** SQG enforced from platform policy.  
-**Free Trial mode:** All findings presented informally; you decide what to fix.
+**Token mode:** All findings presented informally; you decide what to fix.
 
 > **Trigger:** "run scan", "scan only", "conformance test", "BOLA test", "BFLA test", "42crunch scan", "scan config"
 
@@ -189,7 +189,7 @@ Credentials are read from `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42C
 |---|---|---|
 | `API_KEY` | Platform token (`api_*` or `ide_*`) | Platform |
 | `PLATFORM_HOST` | 42Crunch platform base URL (e.g. `https://us.42crunch.cloud`) | Platform |
-| `TRIAL_TOKEN` | Free Trial token (Base64) | Free Trial |
+| `TRIAL_TOKEN` | Access token (Base64) for Starter (Free Trial), Individual, or Individual Pro — variable name kept for backward compatibility | Token |
 | `SCAN42C_HOST` | Override scan target URL (overrides `servers[0]` in OAS) | Both |
 
 Credentials are never printed in plaintext after entry.

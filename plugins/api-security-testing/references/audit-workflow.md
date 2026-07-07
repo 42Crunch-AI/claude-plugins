@@ -4,15 +4,15 @@
 > - `<binary>` — the full path resolved during binary discovery (e.g. `~/.42crunch/bin/42c-ast`). Never call `42c-ast` by name alone unless it is confirmed to be on PATH.
 > - **Never write a literal credential value into a command.** Load credentials from the conf file into the environment first, then let the command inherit them — the raw value must never appear in a command string, tool output, or chat message.
 > - **Platform mode**: before every command, load credentials — macOS/Linux: `set -a; . "$HOME/.42crunch/conf/env"; set +a`; Windows: `Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }`. The command then inherits `API_KEY`/`PLATFORM_HOST` — no explicit prefix needed.
-> - **Free Trial mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` (macOS/Linux) or `--token $env:TRIAL_TOKEN` (Windows) to every command — never the literal token.
+> - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` (macOS/Linux) or `--token $env:TRIAL_TOKEN` (Windows) to every command — never the literal token.
 > - **Score tracking**: record `initial_score`, `initial_sec_score`, and `initial_data_score` immediately after the first parse (Step 2). These are used to build the before/after comparison in the final summary.
 
 ---
 
 ## Step 1 — Run the Audit
 
-> **Free Trial mode**: omit `--tag` and `--report-sqg` from all commands in this
-> step. These flags require platform access and must not be used in free trial mode.
+> **Token mode**: omit `--tag` and `--report-sqg` from all commands in this
+> step. These flags require platform access and must not be used in token mode.
 
 Resolve a platform-appropriate output directory and create it if it does not exist:
 
@@ -41,7 +41,7 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
   <path-to-oas-file>
 ```
 
-### Free Trial mode
+### Token mode
 
 ```bash
 set -a; . "$HOME/.42crunch/conf/env"; set +a
@@ -60,7 +60,7 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 |---------------|----------------------------------------------------------------------------------------------------|
 | `report.json` | Audit results                                                                                      |
 | `todo.json`   | Same as report.json but with `index[]` for OAS path resolution — **prefer this file**              |
-| `sqg.json`    | SQG result — written in platform mode whenever `--report-sqg` is passed (with or without `--tag`). Not written in free trial mode. |
+| `sqg.json`    | SQG result — written in platform mode whenever `--report-sqg` is passed (with or without `--tag`). Not written in token mode. |
 
 ### Check the run result before proceeding
 
@@ -69,8 +69,8 @@ visible — no extra capture needed): `{astVersion, logs, statusCode,
 statusMessage}`. Check it before touching any output file:
 
 - **`statusCode: 0`** → continue to Step 2.
-- **`statusCode: 3` and `statusMessage: limits_reached`** (Free Trial mode
-  only) → the trial has hit its usage limit. Follow `./trial-expired.md` now.
+- **`statusCode: 3` and `statusMessage: limits_reached`** (Token mode
+  only) → the token plan has hit its usage limit. Follow `./token-limit.md` now.
   Do not proceed to Step 2 — `todo.json`/`report.json` were not written.
 - **Any other non-zero `statusCode`** → surface `statusMessage` to the user
   as an error and stop. Do not attempt to parse `todo.json`/`report.json`.
@@ -105,7 +105,7 @@ Audit Score: <score> / 100  |  Security: <sec-score>/30  |  Data Validation: <da
 SQG (<sqg-name>): PASSED / FAILED
 ```
 
-**Free Trial mode** (no `sqg.json`):
+**Token mode** (no `sqg.json`):
 ```
 Audit Score: <score> / 100  |  Security: <sec-score>/30  |  Data Validation: <data-score>/70
 ```
@@ -117,7 +117,7 @@ Otherwise omit the interpretation line; SQG PASSED/FAILED in the headline is the
 **Platform mode only** — when the score crosses from below 70 to 70 or above after fixes are applied, add:
 > `This improvement moves your API from failing to passing the SQG threshold.`
 
-**Free Trial mode only** — before rendering the findings report, prompt the user for session
+**Token mode only** — before rendering the findings report, prompt the user for session
 thresholds (call `AskUserQuestion` with two questions):
 - **Question 1**: `"What minimum score are you targeting for this API?"` — options:
   `["90+ — Excellent", "70 — Good baseline", "50 — Acceptable for now", "Custom — I'll enter a number"]`
@@ -145,7 +145,7 @@ Extract only the needed fields — do not read the raw file into context.
 
 ```bash
 python3 << 'EOF'
-import json, sys
+import json, os, sys
 
 with open("$OUTPUT_DIR/todo.json") as f:
     d = json.load(f)
@@ -189,20 +189,16 @@ if issues:
     print(f"\nissues[{len(issues)}]{{id,section,criticality,description,shown,total,truncated}}:")
     for issue_id, section, crit, desc, shown, total, truncated in issues:
         print(f"  {issue_id},{section},{crit},{desc},{shown},{total},{truncated}")
-EOF
-```
 
-```bash
-# sqg.json (platform mode only)
-python3 << 'EOF'
-import json
-with open("$OUTPUT_DIR/sqg.json") as f:
-    sqg = json.load(f)
-print(f"sqg_acceptance: {sqg['acceptance']}")
-print(f"sqg_name: {sqg['sqgsDetail'][0]['name']}")
-blocking = [r for d in sqg.get("processingDetails", []) for r in d.get("blockingRules", [])]
-if blocking:
-    print(f"blocking_rules: {', '.join(blocking)}")
+# sqg.json (platform mode only — file is absent in token mode)
+if os.path.exists("$OUTPUT_DIR/sqg.json"):
+    with open("$OUTPUT_DIR/sqg.json") as f:
+        sqg = json.load(f)
+    print(f"sqg_acceptance: {sqg['acceptance']}")
+    print(f"sqg_name: {sqg['sqgsDetail'][0]['name']}")
+    blocking = [r for pd in sqg.get("processingDetails", []) for r in pd.get("blockingRules", [])]
+    if blocking:
+        print(f"blocking_rules: {', '.join(blocking)}")
 EOF
 ```
 
@@ -256,16 +252,16 @@ if ($issues.Count -gt 0) {
         Write-Host "  $($i.id),$($i.section),$($i.criticality),$($i.description),$($i.shown),$($i.total),$($i.truncated)"
     }
 }
-```
 
-```powershell
-# sqg.json (platform mode only)
-$sqg = Get-Content "$OUTPUT_DIR\sqg.json" | ConvertFrom-Json
-Write-Host "sqg_acceptance: $($sqg.acceptance)"
-Write-Host "sqg_name: $($sqg.sqgsDetail[0].name)"
-$blocking = $sqg.processingDetails | ForEach-Object { $_.blockingRules } | Where-Object { $_ }
-if ($blocking) {
-    Write-Host "blocking_rules: $($blocking -join ', ')"
+# sqg.json (platform mode only — file is absent in token mode)
+if (Test-Path "$OUTPUT_DIR\sqg.json") {
+    $sqg = Get-Content "$OUTPUT_DIR\sqg.json" | ConvertFrom-Json
+    Write-Host "sqg_acceptance: $($sqg.acceptance)"
+    Write-Host "sqg_name: $($sqg.sqgsDetail[0].name)"
+    $blocking = $sqg.processingDetails | ForEach-Object { $_.blockingRules } | Where-Object { $_ }
+    if ($blocking) {
+        Write-Host "blocking_rules: $($blocking -join ', ')"
+    }
 }
 ```
 
@@ -294,7 +290,7 @@ if sqg:
     if sqg["acceptance"] != "yes":
         blocking_ids = set(sqg["sqgsDetail"][0]["directives"].get("issueRules", []))
 else:
-    # Free Trial mode: use user-defined blocking_severity_threshold from the
+    # Token mode: use user-defined blocking_severity_threshold from the
     # session threshold prompt (CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1)
     for section in ["security", "data"]:
         for issue_id, issue_data in d[section]["issues"].items():
@@ -428,7 +424,7 @@ pass as failed.
 After all fixes are applied, re-run the audit (**Step 1**) to confirm the SQG
 now passes:
 - **Platform mode**: confirm `sqg["acceptance"]` is `"yes"` in the new `sqg.json`.
-- **Free Trial mode**: confirm the new score meets `target_score` and no issues
+- **Token mode**: confirm the new score meets `target_score` and no issues
   with criticality ≥ `blocking_severity_threshold` remain in `todo.json`.
 - If a previously blocking issue still has occurrences after a fix cycle
   (`issueCounter > 0` for that rule ID), repeat Steps 3–4 for the remaining

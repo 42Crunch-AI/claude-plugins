@@ -70,8 +70,8 @@ Audit Complete
   Score change:   <initial-score> → <score>  (<delta>)  |  Data: <initial-data> → <data-score>  (<data-delta>)   ← omit if no fixes applied
   SQG:            PASSED  (<sqg-name> — your org's security quality gate is met)    ← platform mode, passed
   SQG:            FAILED  (<sqg-name> — the quality gate is not met; fixes above are required)    ← platform mode, failed
-  SQG:            N/A  (Free Trial — no automated gate; user-defined thresholds applied this session)    ← free trial mode
-  Mode:           Platform / Free Trial
+  SQG:            N/A  (Token mode — no automated gate; user-defined thresholds applied this session)    ← token mode
+  Mode:           Platform / Token
   Tag:            <category>:<tagname>             ← platform mode only, when a tag is assigned; omit this row if no tag
   Issues fixed:   2 SQG-blocking  (0 security · 2 data validation)
   OAS updated:    <path/to/openapi.json>

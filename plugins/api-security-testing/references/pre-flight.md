@@ -9,7 +9,7 @@ any skill-specific logic. Do not proceed if any step fails or the user cancels.
 
 Before Step 1, check whether pre-flight has already completed successfully
 earlier in **this same conversation**, with no intervening credential change
-(the user has not run `42crunch-setup`, nor gone through `trial-expired.md`'s
+(the user has not run `42crunch-setup`, nor gone through `token-limit.md`'s
 reconfiguration, since):
 
 - **Yes** → skip Step 1 (Binary Check) and Step 2 (Credential Check) entirely.
@@ -79,7 +79,7 @@ else {
   section in that file). The only output is `"42c-ast updated from vX to vY."`
   if an update was applied. If the manifest is unreachable, announce:
   `"Could not reach the update server — continuing with installed 42c-ast v<version>."` then continue to Step 2.
-- **`BINARY=missing`** → announce `"The 42c-ast binary isn't installed yet — running setup now."` then invoke `42crunch-setup` as a **subroutine** (pass caller context: `pre-flight`). Do not proceed if setup fails. On success, continue to Step 2.
+- **`BINARY=missing`** → announce `"The 42c-ast binary isn't installed yet — running setup now."` then invoke `42crunch-setup` as a **subroutine** (pass caller context: `pre-flight`). Do not proceed if setup fails. On success, setup's credential pass has just classified (or freshly configured) the credential mode — **skip Step 2's classification**, reuse that mode, and continue directly to Step 3.
 
 ---
 
@@ -93,10 +93,11 @@ command, tool output, or chat message:
 # macOS / Linux
 ENV_FILE="$HOME/.42crunch/conf/env"
 if grep -q '^TRIAL_TOKEN=' "$ENV_FILE" 2>/dev/null; then
-  if [ -f "$HOME/.42crunch/conf/.trial-expired" ]; then
-    echo "MODE=freetrial_expired"
+  # .trial-expired is the legacy sentinel name written by older plugin versions
+  if [ -f "$HOME/.42crunch/conf/.token-limit" ] || [ -f "$HOME/.42crunch/conf/.trial-expired" ]; then
+    echo "MODE=token_limit"
   else
-    echo "MODE=freetrial"
+    echo "MODE=token"
   fi
 elif grep -qE '^API_KEY=(api_|ide_)' "$ENV_FILE" 2>/dev/null; then
   echo "MODE=platform"
@@ -111,10 +112,11 @@ fi
 # Windows
 $EnvFile = "$env:APPDATA\42Crunch\conf\env"
 if (Select-String -Path $EnvFile -Pattern '^TRIAL_TOKEN=' -Quiet -ErrorAction SilentlyContinue) {
-  if (Test-Path "$env:APPDATA\42Crunch\conf\.trial-expired") {
-    Write-Output "MODE=freetrial_expired"
+  # .trial-expired is the legacy sentinel name written by older plugin versions
+  if ((Test-Path "$env:APPDATA\42Crunch\conf\.token-limit") -or (Test-Path "$env:APPDATA\42Crunch\conf\.trial-expired")) {
+    Write-Output "MODE=token_limit"
   } else {
-    Write-Output "MODE=freetrial"
+    Write-Output "MODE=token"
   }
 } elseif (Select-String -Path $EnvFile -Pattern '^API_KEY=(api_|ide_)' -Quiet -ErrorAction SilentlyContinue) {
   Write-Output "MODE=platform"
@@ -125,8 +127,8 @@ if (Select-String -Path $EnvFile -Pattern '^TRIAL_TOKEN=' -Quiet -ErrorAction Si
 }
 ```
 
-- **`MODE=freetrial`** → **Free Trial mode**. Use `--freemium-host stateless.42crunch.com:443` and `--token <TRIAL_TOKEN>` in all commands (the token is substituted directly into the `42c-ast` invocation — never echoed on its own). Proceed silently.
-- **`MODE=freetrial_expired`** → a previous run already discovered this trial hit its usage limit. Skip Step 3 onward entirely — follow `./trial-expired.md` now, without attempting any `42c-ast` call.
+- **`MODE=token`** → **Token mode**. Use `--freemium-host stateless.42crunch.com:443` and `--token <TRIAL_TOKEN>` in all commands (the token is substituted directly into the `42c-ast` invocation — never echoed on its own). Proceed silently.
+- **`MODE=token_limit`** → a previous run already discovered this token plan hit its usage limit (Starter trial ended, or Individual / Individual Pro monthly tokens exhausted). Skip Step 3 onward entirely — follow `./token-limit.md` now, without attempting any `42c-ast` call.
 - **`MODE=platform`** → **Platform mode**. Read `PLATFORM_HOST` separately — it's a URL, not a secret, safe to print in full:
   ```bash
   grep '^PLATFORM_HOST=' "$ENV_FILE"
@@ -157,7 +159,7 @@ if (Select-String -Path $EnvFile -Pattern '^TRIAL_TOKEN=' -Quiet -ErrorAction Si
 
 ## Step 4 — Tag Detection (platform mode only)
 
-Read `./tag-detection.md` and follow all steps. In free trial mode, skip
+Read `./tag-detection.md` and follow all steps. In token mode, skip
 tag detection entirely. The tag detection flow handles all outcomes — tag
 found, user assigns a tag, or user proceeds without one — before returning
 to the calling skill.
@@ -170,13 +172,13 @@ to the calling skill.
 |-------------------|-----------|-------------------------------------------|
 | `API_KEY`         | Platform  | `api_*` or `ide_*` token                 |
 | `PLATFORM_HOST`   | Platform  | Platform base URL                         |
-| `TRIAL_TOKEN`  | Free Trial  | Base64 token, passed as `--token`         |
+| `TRIAL_TOKEN`  | Token     | Base64 access token — Starter (Free Trial), Individual, or Individual Pro — passed as `--token`. Variable name kept for backward compatibility with existing config files. |
 
 **Platform mode**: `API_KEY` and `PLATFORM_HOST` set for every command.
 `--report-sqg` always applied. `--tag <category>:<tagname>` applied only
 when a tag is assigned.
 
-**Free Trial mode**: `--freemium-host stateless.42crunch.com:443` and
+**Token mode**: `--freemium-host stateless.42crunch.com:443` and
 `--token <TRIAL_TOKEN>` for every command. No `--tag` or `--report-sqg`.
 
 ---

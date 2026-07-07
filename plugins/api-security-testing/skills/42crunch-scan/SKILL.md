@@ -50,6 +50,9 @@ running `42crunch-audit` first.
    - BOLA candidate count: operations where the path has `{…Id}`, `{…Key}`, `{…Ref}`, or similar resource-ID placeholders AND the method is GET, PUT, PATCH, or DELETE
    - Whether the OAS contains sample data: any operation with `example`, `examples`, or `default` values on its request body or parameter schemas
 
+   Carry these results forward — `scan-workflow.md` reuses them in its auth
+   setup, test-data, and classification steps instead of re-reading the OAS.
+
 4. **Ask for permission to configure the scan.** Output the following scan
    preview as a chat message first:
 
@@ -60,7 +63,7 @@ running `42crunch-audit` first.
      Auth:     <scheme types>  [+  second user needed — <N> BOLA candidate(s)]
      Samples:  OAS has sample data  /  No samples — you'll need to provide test data
      Tag:      <category>:<tagname>           ← platform mode only, when a tag is assigned; omit if no tag
-     Mode:     Platform / Free Trial
+     Mode:     Platform / Token
    ```
 
    Then call `AskUserQuestion`:
@@ -89,7 +92,7 @@ running `42crunch-audit` first.
   `scan conf validate` and resolve all validation errors before continuing to
   happy-path or full scan runs.
 
-   **Free Trial mode**: no SQG is enforced for scan. Present all findings for
+   **Token mode**: no SQG is enforced for scan. Present all findings for
    information. The user decides which (if any) to fix.
 
 6. **Render findings and ask for fix permission before final Scan summary.**
@@ -118,10 +121,10 @@ After the scan completes, produce a summary in this shape:
 
 ```
 Scan Complete
-  Mode:           Platform / Free Trial
+  Mode:           Platform / Token
   SQG:            PASSED  (<sqg-name> — your org's security quality gate is met)    ← platform mode, passed
   SQG:            FAILED  (<sqg-name> — the quality gate is not met; fixes above are required)    ← platform mode, failed
-  SQG:            N/A  (Free Trial — scan findings are informational; no gate enforced)    ← free trial mode
+  SQG:            N/A  (Token mode — scan findings are informational; no gate enforced)    ← token mode
   Tag:            <category>:<tagname>             ← platform mode only, when a tag is assigned; omit this row if no tag
   Authorization:  BOLA confirmed on 1 operation — OAS updated · server-side fix applied
   Conformance:    1 SQG-blocking issue fixed (OAS + code) · 3 informational findings surfaced

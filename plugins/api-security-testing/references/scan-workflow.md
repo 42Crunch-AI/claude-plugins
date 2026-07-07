@@ -4,15 +4,16 @@
 > - `<binary>` — the full path resolved during binary discovery (e.g. `~/.42crunch/bin/42c-ast`). Never call `42c-ast` by name alone unless it is confirmed to be on PATH.
 > - **Never write a literal credential value into a command.** Load credentials from the conf file into the environment first, then let the command inherit them — the raw value must never appear in a command string, tool output, or chat message.
 > - **Platform mode**: before every command, load credentials — macOS/Linux: `set -a; . "$HOME/.42crunch/conf/env"; set +a`; Windows: `Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }`. The command then inherits `API_KEY`/`PLATFORM_HOST` — no explicit prefix needed.
-> - **Free Trial mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` (macOS/Linux) or `--token $env:TRIAL_TOKEN` (Windows) to every command — never the literal token.
+> - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` (macOS/Linux) or `--token $env:TRIAL_TOKEN` (Windows) to every command — never the literal token.
+> - **OAS analysis is done once, in the calling skill.** The skill's scan-preview step already extracted the operation count, auth scheme types, BOLA/BFLA candidates, and sample-data presence. Reuse those results throughout Steps 2–5 — do not re-read the OAS to re-derive facts already established this conversation. Open the OAS only to look up detail not yet extracted (e.g. a specific operation's schema or examples).
 > - **PowerShell string quoting**: when a variable is immediately followed by `:` inside a double-quoted string, PowerShell parses `$varName:` as a PSDrive reference (like `$env:TEMP`) and throws `InvalidVariableReferenceWithDrive`. Always use `${varName}` to delimit the name — e.g. `"${opName}: ..."` not `"$opName: ..."`. This applies to any inline PowerShell generated during the session, not just the static snippets below.
 
 ---
 
 ## Step 1 — Locate or Create Scan Config
 
-> **Free Trial mode**: omit `--tag` and `--report-sqg` from all commands in this step.
-> These flags require platform access and must not be used in free trial mode.
+> **Token mode**: omit `--tag` and `--report-sqg` from all commands in this step.
+> These flags require platform access and must not be used in token mode.
 
 ### 1a — Resolve git root and alias
 
@@ -59,36 +60,19 @@ Walk upward from `GIT_ROOT` looking for `.42c/conf.yaml`.
 Check whether `.42c/scan/<alias>/scanconf.json` exists **on disk**.
 
 **If it exists:**
-- Validate it:
-  ```bash
-  # Platform mode
-  set -a; . "$HOME/.42crunch/conf/env"; set +a
-  <binary> scan conf validate <relative-oas-path> \
-    --conf-file .42c/scan/<alias>/scanconf.json
+- Store `CONF_FILE=.42c/scan/<alias>/scanconf.json` and proceed directly to
+  Step 1c. Do **not** validate it here — Step 1c writes the target URL first
+  and then runs a single validation checkpoint that covers both the existing
+  content and the URL write. Validating twice (before and after the URL write)
+  is a wasted network call.
 
-  # Free Trial mode
-  set -a; . "$HOME/.42crunch/conf/env"; set +a
-  <binary> scan conf validate <relative-oas-path> \
-    --freemium-host stateless.42crunch.com:443 \
-    --token "$TRIAL_TOKEN" \
-    --conf-file .42c/scan/<alias>/scanconf.json
-  ```
-- Check the status object before deciding — this may be the first `42c-ast`
-  call this run makes, so check for trial expiry here rather than assuming a
-  failure just means an invalid config:
-  - **`statusCode: 0`** → store `CONF_FILE=.42c/scan/<alias>/scanconf.json` and proceed to Step 2.
-  - **`statusCode: 3` and `statusMessage: limits_reached`** (Free Trial mode
-    only) → the trial has hit its usage limit. Follow `./trial-expired.md` now.
-    Do not treat this as an invalid config, do not attempt to regenerate.
-  - **Any other non-zero** → treat as invalid (re-generate).
-
-**If it does not exist (or was invalid):**
+**If it does not exist (or Step 1c's checkpoint found an existing config invalid):**
 - Ensure the output directory exists:
   ```bash
   mkdir -p .42c/scan/<alias>
   ```
 - Generate a baseline config using the **relative OAS path** (not alias, not absolute path).
-  Platform mode: include `--tag` only when a tag was resolved. Free Trial mode: omit `--tag`.
+  Platform mode: include `--tag` only when a tag was resolved. Token mode: omit `--tag`.
   ```bash
   # Platform mode
   set -a; . "$HOME/.42crunch/conf/env"; set +a
@@ -98,7 +82,7 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists **on disk**.
     [--tag <category>:<tag>] \
     <relative-oas-path>
 
-  # Free Trial mode
+  # Token mode
   set -a; . "$HOME/.42crunch/conf/env"; set +a
   <binary> scan conf generate \
     --freemium-host stateless.42crunch.com:443 \
@@ -107,15 +91,16 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists **on disk**.
     --output .42c/scan/<alias>/scanconf.json \
     <relative-oas-path>
   ```
-- Check the generate result before validating — this may be the first
-  `42c-ast` call this run makes:
-  - **`statusCode: 3` and `statusMessage: limits_reached`** (Free Trial mode
-    only) → follow `./trial-expired.md` now. Do not proceed to validate.
+- Check the generate result — this may be the first `42c-ast` call this run
+  makes:
+  - **`statusCode: 3` and `statusMessage: limits_reached`** (Token mode
+    only) → follow `./token-limit.md` now. Do not proceed.
   - **Any other non-zero** → surface the error to the user and stop.
-  - **`statusCode: 0`** → continue below.
-- Validate (use the same mode-appropriate command as above).
-- If valid: store `CONF_FILE=.42c/scan/<alias>/scanconf.json` and proceed to Step 2.
-- If invalid: surface the error to the user and stop.
+  - **`statusCode: 0`** → store `CONF_FILE=.42c/scan/<alias>/scanconf.json`,
+    apply the normalization below, then proceed to Step 1c. Do **not** run a
+    standalone validate here — the config is edited again in Step 1c
+    (normalization + target URL) and validated there once; validating the raw
+    generated output first is a wasted network call.
 
 **Scan Configuration Normalization after first generation (required):**
 - On first `scan conf generate`, the generated `environments.default.variables`
@@ -166,8 +151,8 @@ Important schema rule for `environments.default.variables`:
   }
   ```
 
-After writing `SCAN_TARGET_URL` (and after any direct edits to `CONF_FILE`),
-run an immediate config validation checkpoint before proceeding.
+After writing `SCAN_TARGET_URL` (and any other Step 1 edits — normalization,
+etc.), run the **single Step 1 validation checkpoint**:
 
 ```bash
 # Platform mode
@@ -175,7 +160,7 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan conf validate <relative-oas-path> \
   --conf-file <CONF_FILE>
 
-# Free Trial mode
+# Token mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan conf validate <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
@@ -183,20 +168,34 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
   --conf-file <CONF_FILE>
 ```
 
-If validation fails, stop and fix the config before Step 2.
+Check the status object — this may be the first `42c-ast` call this run makes,
+so check for a token-plan limit rather than assuming a failure means an invalid
+config:
+
+- **`statusCode: 0`** → proceed to Step 2.
+- **`statusCode: 3` and `statusMessage: limits_reached`** (Token mode
+  only) → the token plan has hit its usage limit. Follow `./token-limit.md` now.
+  Do not treat this as an invalid config, do not attempt to regenerate.
+- **Any other non-zero:**
+  - If `CONF_FILE` was an **existing** config found in Step 1b → treat it as
+    invalid: regenerate via Step 1b's generate branch, then repeat Step 1c
+    (write the URL, validate once).
+  - If it was **freshly generated** this run → surface the error to the user
+    and stop.
 
 ---
 
 ## Step 2 — Authentication Setup
 
-Read the OAS `securitySchemes` and global/operation `security` definitions to
-determine the auth scheme, then collect credentials using the per-scheme flows
-below. Every credential field is collected via `AskUserQuestion` — never
-generate, guess, or suggest credential values.
+Use the auth scheme types already identified in the skill's preview analysis
+(read `securitySchemes` from the OAS only if the preview result is not in
+context), then collect credentials using the per-scheme flows below. Every
+credential field is collected via `AskUserQuestion` — never generate, guess,
+or suggest credential values.
 
 **BOLA/BFLA second-user identification (do this before collecting any credentials):**
-Identify all BOLA/BFLA candidates in the OAS. Flag every operation where ALL
-of the following are true:
+Reuse the BOLA/BFLA candidate list from the skill's preview analysis if it is
+in context. Otherwise flag every operation where ALL of the following are true:
 - The path contains at least one path parameter whose name ends in `Id`, `Key`,
   or `Ref` (e.g. `{userId}`, `{orderId}`, `{documentRef}`), or is a UUID/integer
   field whose name matches a resource type — indicating a specific resource
@@ -325,8 +324,10 @@ template variables first — otherwise `environment` overrides have no effect.
 
 Before classifying operations, establish the source of test data for the scan.
 
-**Check the OAS for existing sample data**: scan all operation request bodies and
-parameters for `example`, `examples`, or `default` values on their schemas.
+**Sample-data presence was already determined in the skill's preview analysis**
+— reuse that result. Only re-scan the OAS (request bodies and parameters for
+`example` / `examples` / `default` values) if the preview result is not in
+context.
 
 Call `AskUserQuestion`:
 
@@ -421,7 +422,9 @@ Keep these available when classifying operations in Step 5 — Class-A operation
 ## Step 5 — Operation Classification
 
 Before writing any scenario into the scan config, analyse every operation in
-the OAS and classify it. Before presenting the table, give the user a brief
+the OAS and classify it. The `BOLA?` column reuses the candidate list already
+established in Step 2 (which itself came from the skill's preview analysis) —
+do not re-derive it here. Before presenting the table, give the user a brief
 explanation of the four classes so they can meaningfully validate the results.
 
 This step is mandatory and visible: do not treat the classification as an
@@ -668,13 +671,18 @@ After all Step 2 to Step 6 edits are complete (credentials, operation
 classification, scenario chains, and authorization test wiring), validate
 `CONF_FILE` again before running happy-path validation.
 
+**Skip condition:** if Steps 2–6 made **no changes** to `CONF_FILE` since the
+Step 1c checkpoint passed (rare — no auth schemes, no Class-B/C/D operations,
+no authorization tests), skip this checkpoint and go straight to Step 8 —
+re-validating an unchanged file is a wasted network call.
+
 ```bash
 # Platform mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan conf validate <relative-oas-path> \
   --conf-file <CONF_FILE>
 
-# Free Trial mode
+# Token mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan conf validate <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
@@ -712,7 +720,7 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan run --enrich=false \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
 
-# macOS / Linux — Free Trial mode
+# macOS / Linux — Token mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
@@ -725,7 +733,7 @@ Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^
 & <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE> `
   > "$env:TEMP\42c-happy-out.json" 2>&1
 
-# Windows — Free Trial mode
+# Windows — Token mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
 & <binary> scan run --enrich=false <relative-oas-path> `
   --freemium-host stateless.42crunch.com:443 `
@@ -878,7 +886,7 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan run --enrich=false --report-sqg \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
 
-# macOS / Linux — Free Trial mode
+# macOS / Linux — Token mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan run --enrich=false <relative-oas-path> \
   --freemium-host stateless.42crunch.com:443 \
@@ -891,7 +899,7 @@ Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^
 & <binary> scan run --enrich=false --report-sqg <relative-oas-path> --conf-file <CONF_FILE> `
   > "$env:TEMP\42c-scan-out.json" 2>&1
 
-# Windows — Free Trial mode
+# Windows — Token mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
 & <binary> scan run --enrich=false <relative-oas-path> `
   --freemium-host stateless.42crunch.com:443 `
@@ -1095,9 +1103,9 @@ Then proceed to Step 12.
 
 ---
 
-**Free Trial mode**: `sqgPass` will be absent or `true`. Present all findings
+**Token mode**: `sqgPass` will be absent or `true`. Present all findings
 informally — no quality gate is enforced. Note to the user:
-> "In free trial mode the scan shows all findings for your information — there
+> "In token mode the scan shows all findings for your information — there
 > is no automatic quality gate. Authorization failures (red) are real
 > vulnerabilities worth fixing regardless of the gate (OWASP API1/API5).
 > Conformance findings (yellow) document gaps between your OAS contract and
@@ -1131,9 +1139,9 @@ Mandatory behavior:
 Scan Results  |  SQG (<sqg-name>): PASSED / FAILED
 ```
 
-**Free Trial mode header:**
+**Token mode header:**
 ```
-Scan Results  |  SQG: N/A (Free Trial — no scan SQG enforced)
+Scan Results  |  SQG: N/A (Token mode — no scan SQG enforced)
 ```
 
 ```
@@ -1199,7 +1207,7 @@ Mandatory behavior:
 3. Conformance findings **not** in `sqgDetails[].blockingRules` → surface only;
    do not include in the fix list.
 
-**Free Trial mode:**
+**Token mode:**
 1. All **authorization failures** (BOLA/BFLA confirmed) → always a fix candidate.
 2. There are no SQG-blocking conformance findings — all conformance findings are
    informational. Surface them to the user and ask which (if any) they want to fix.
@@ -1216,8 +1224,8 @@ Mandatory behavior:
 - **question**: `"Here is the complete scan report (shown above). I can apply the following fixes to <filename>: 🔴 Authorization fixes: [list] 🟠 SQG-blocking conformance fixes: [list]. The 🟡 informational findings are not SQG-blocking and will not be fixed automatically — let me know if you'd like to address any of them too. What would you like to do?"`
 - **options**: `["Yes — apply all fixes now", "Show me the diff first", "No — skip fixes for now"]`
 
-**Free Trial mode** — call `AskUserQuestion`:
-- **question**: `"Here is the complete scan report (shown above). No SQG enforcement applies in free trial mode. 🔴 Authorization fixes I can apply: [list] 🟡 Conformance findings (informational — your call whether to fix): [list]. What would you like to do?"`
+**Token mode** — call `AskUserQuestion`:
+- **question**: `"Here is the complete scan report (shown above). No SQG enforcement applies in token mode. 🔴 Authorization fixes I can apply: [list] 🟡 Conformance findings (informational — your call whether to fix): [list]. What would you like to do?"`
 - **options**: `["Yes — apply the authorization fixes", "Show me the diff first", "No — skip fixes; summarise findings only"]`
 
 If the user chooses **"Show me the diff first"** in either mode, display the proposed
@@ -1354,7 +1362,7 @@ If the user selects **Yes — fix more issues**:
 If the user selects **No — present the final scan summary**:
 - Proceed to the final scan summary output.
 
-**Free Trial mode**: `sqgPass` is always `true` or absent — Step 12h is a no-op; proceed directly to the final scan summary output.
+**Token mode**: `sqgPass` is always `true` or absent — Step 12h is a no-op; proceed directly to the final scan summary output.
 
 ---
 
