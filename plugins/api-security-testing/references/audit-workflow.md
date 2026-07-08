@@ -5,6 +5,7 @@
 > - **Never write a literal credential value into a command.** Load credentials from the conf file into the environment first, then let the command inherit them — the raw value must never appear in a command string, tool output, or chat message.
 > - **Platform mode**: before every command, load credentials — macOS/Linux: `set -a; . "$HOME/.42crunch/conf/env"; set +a`; Windows: `Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }`. The command then inherits `API_KEY`/`PLATFORM_HOST` — no explicit prefix needed.
 > - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` (macOS/Linux) or `--token $env:TRIAL_TOKEN` (Windows) to every command — never the literal token.
+> - **User agent (usage metrics)**: every `42c-ast` command in this file must carry `--user-agent "$USER_AGENT"` (macOS/Linux) or `--user-agent $UserAgent` (Windows) so 42Crunch can attribute usage to this integration. Format: `42Crunch-Claude-<source>/<binary-version>` (e.g. `42Crunch-Claude-VSCode/3.57.0`) — the value never contains secrets. `<source>` is derived from `CLAUDE_CODE_ENTRYPOINT`: `claude-vscode` → `VSCode`, `cli` (or unset) → `CLI`, `remote` → `Web`; any other value is passed through with the `claude-` prefix stripped and non-alphanumerics removed, so new Claude Code surfaces (e.g. JetBrains) appear in metrics without a plugin update. Compute it in the same shell invocation as the command, right after loading credentials — macOS/Linux: `UA_SRC=$(case "${CLAUDE_CODE_ENTRYPOINT:-cli}" in (claude-vscode) echo VSCode ;; (cli) echo CLI ;; (remote) echo Web ;; (*) printf '%s' "$CLAUDE_CODE_ENTRYPOINT" | sed 's/^claude-//; s/[^A-Za-z0-9]//g' ;; esac); USER_AGENT="42Crunch-Claude-${UA_SRC:-CLI}/$("<binary>" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"`; Windows: `$UaSrc = if (-not $env:CLAUDE_CODE_ENTRYPOINT -or $env:CLAUDE_CODE_ENTRYPOINT -eq 'cli') { 'CLI' } elseif ($env:CLAUDE_CODE_ENTRYPOINT -eq 'claude-vscode') { 'VSCode' } elseif ($env:CLAUDE_CODE_ENTRYPOINT -eq 'remote') { 'Web' } else { $env:CLAUDE_CODE_ENTRYPOINT -replace '^claude-','' -replace '[^A-Za-z0-9]','' }; if (-not $UaSrc) { $UaSrc = 'CLI' }` then `$UserAgent = "42Crunch-Claude-$UaSrc/$(((& <binary> --version) | Select-String '\d+\.\d+\.\d+' | Select-Object -First 1).Matches[0].Value)"`. If a command fails with `unknown flag: --user-agent` (a binary older than 3.57.0 that could not be updated), retry it once without the flag — usage metrics must never block a run.
 > - **Score tracking**: record `initial_score`, `initial_sec_score`, and `initial_data_score` immediately after the first parse (Step 2). These are used to build the before/after comparison in the final summary.
 
 ---
@@ -32,7 +33,10 @@ New-Item -ItemType Directory -Force -Path $OUTPUT_DIR | Out-Null
 
 ```bash
 set -a; . "$HOME/.42crunch/conf/env"; set +a
+UA_SRC=$(case "${CLAUDE_CODE_ENTRYPOINT:-cli}" in (claude-vscode) echo VSCode ;; (cli) echo CLI ;; (remote) echo Web ;; (*) printf '%s' "$CLAUDE_CODE_ENTRYPOINT" | sed 's/^claude-//; s/[^A-Za-z0-9]//g' ;; esac)
+USER_AGENT="42Crunch-Claude-${UA_SRC:-CLI}/$("<binary>" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
 <binary> audit run \
+  --user-agent "$USER_AGENT" \
   --enrich=false \
   --output "$OUTPUT_DIR/report.json" \
   --output-format json \
@@ -45,7 +49,10 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 
 ```bash
 set -a; . "$HOME/.42crunch/conf/env"; set +a
+UA_SRC=$(case "${CLAUDE_CODE_ENTRYPOINT:-cli}" in (claude-vscode) echo VSCode ;; (cli) echo CLI ;; (remote) echo Web ;; (*) printf '%s' "$CLAUDE_CODE_ENTRYPOINT" | sed 's/^claude-//; s/[^A-Za-z0-9]//g' ;; esac)
+USER_AGENT="42Crunch-Claude-${UA_SRC:-CLI}/$("<binary>" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
 <binary> audit run \
+  --user-agent "$USER_AGENT" \
   --enrich=false \
   --freemium-host stateless.42crunch.com:443 \
   --token "$TRIAL_TOKEN" \
