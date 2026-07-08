@@ -47,7 +47,7 @@ running `42crunch-audit` first.
    Read the OAS file and collect:
    - Total operation count
    - Auth scheme types from `securitySchemes` (Bearer/JWT, API Key, Basic, OAuth2)
-   - BOLA candidate count: operations where the path has `{…Id}`, `{…Key}`, `{…Ref}`, or similar resource-ID placeholders AND the method is GET, PUT, PATCH, or DELETE
+   - BOLA candidate count: operations that reference a specific existing resource by a client-supplied id/key/ref — in a **path** parameter (`{…Id}`, `{…Key}`, `{…Ref}`), a **query** parameter (`?orderId=`), or a **request-body field** (`POST /lookup {orderId}`, `POST /transfer {fromAccountId, toAccountId}`). Method does not gate candidacy; only pure collection or create-new operations are excluded
    - Whether the OAS contains sample data: any operation with `example`, `examples`, or `default` values on its request body or parameter schemas
 
    Carry these results forward — `scan-workflow.md` reuses them in its auth

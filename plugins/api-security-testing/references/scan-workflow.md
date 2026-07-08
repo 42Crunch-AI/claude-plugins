@@ -195,16 +195,31 @@ or suggest credential values.
 
 **BOLA/BFLA second-user identification (do this before collecting any credentials):**
 Reuse the BOLA/BFLA candidate list from the skill's preview analysis if it is
-in context. Otherwise flag every operation where ALL of the following are true:
-- The path contains at least one path parameter whose name ends in `Id`, `Key`,
-  or `Ref` (e.g. `{userId}`, `{orderId}`, `{documentRef}`), or is a UUID/integer
-  field whose name matches a resource type — indicating a specific resource
-  instance, not a collection.
-- The HTTP method is GET, PUT, PATCH, or DELETE (i.e. the operation reads or
-  mutates a specific resource instance, not a collection).
+in context. Otherwise flag every operation that acts on a **specific existing
+resource instance named by a client-supplied object reference** — an id / key /
+ref to a resource that some *other* request created. The reference can sit in
+any of three locations; check all of them, not just the path:
 
-HTTP method does NOT gate BOLA candidacy — a PUT or PATCH on `/{resourceId}`
-is just as much a BOLA candidate as a DELETE or GET on the same path.
+- **Path parameter** — name ends in `Id`, `Key`, or `Ref`, or is a UUID/integer
+  named after a resource (`GET /orders/{orderId}`, `DELETE /users/{userId}`).
+- **Query parameter** — the same shape carried in the query string
+  (`GET /search?orderId=…`, `GET /documents?ref=…`).
+- **Request-body field** — a field that references an existing object rather
+  than populating a new one (`POST /lookup {orderId}`, `POST /transfer
+  {fromAccountId, toAccountId}`, `POST /orders/{id}/share {targetUserId}`). A
+  body carrying **multiple** references (e.g. a transfer) is a BOLA candidate on
+  **each** reference.
+
+HTTP method does NOT gate candidacy: a `POST` whose body names an existing
+resource (a lookup, transfer, share, or action-on-object call) is as much a
+BOLA candidate as a `GET` / `PUT` / `PATCH` / `DELETE` on `/{resourceId}`. What
+*excludes* an operation is the absence of any reference to an existing instance
+— a pure collection `GET /orders` (list), or a `POST /orders` that only creates
+a new resource from attributes it is given (`{item}`, `{name}`) without
+referencing another object. This location-agnostic swap has been verified
+end-to-end: the scanner seeds the resource as User 1 and replays the operation
+under User 2's token regardless of whether the id sits in the path, query, or
+body.
 
 Flag privileged operations (admin-only actions) separately as BFLA candidates
 even if they have no path ID parameter. Use these heuristics to detect them
@@ -462,18 +477,21 @@ satisfied from:
 - The `{{$randomuint}}` / `{{$randomstring}}` macros for uniqueness
 
 **B — Dependency-chain required**
-One or more path or query params contain a dynamic ID that can only come from
-a prior operation's response body (e.g. `{orderId}`, `{userId}`, `{documentId}`).
+One or more inputs contain a dynamic ID that can only come from a prior
+operation's response body (e.g. `{orderId}`, `{userId}`, `{documentId}`). The ID
+can be consumed from a **path** parameter, a **query** parameter, or a
+**request-body field** — all three are dependency-chain inputs.
 
 Detection heuristic:
-1. Identify path params that look like resource IDs (end in `Id`, `Key`, `Ref`,
-   or are a UUID/integer field named after a resource).
+1. Identify resource-ID inputs in any location — path params, query params, or
+   body fields that reference an existing object (end in `Id`, `Key`, `Ref`, or
+   are a UUID/integer named after a resource).
 2. Find the operation that creates or returns that resource (typically a `POST`
    or `GET` on the parent collection path).
 3. Find the response body field in that operation's success schema that provides
    the ID value.
-4. Propose the chain: `<CreatorOp> → <TargetOp>` with the JSON Pointer to
-   extract the variable.
+4. Propose the chain: `<CreatorOp> → <TargetOp>`, noting where the ID is consumed
+   (path / query / body) and the JSON Pointer to extract it.
 
 **C — User-data-required**
 Inputs cannot be resolved automatically and no plausible creator operation
@@ -524,8 +542,10 @@ Operation              | Class  | BOLA? | Proposed data source
 UserLogin              | A      | no    | env vars: {{username}} / {{password}}
 UserRegistration       | A      | no    | {{$randomuint}} macro for username/email
 CreateResource         | A      | no    | OAS body example + {{userId}} from auth
-RetrieveResource       | B      | yes   | CreateResource → /{resourceId} (`before` block)
-UpdateResource         | B      | yes   | CreateResource → /{resourceId} (`before` block)
+RetrieveResource       | B      | yes   | CreateResource → /{resourceId} in path (`before` block)
+UpdateResource         | B      | yes   | CreateResource → /{resourceId} in path (`before` block)
+LookupResource         | B      | yes   | CreateResource → resourceId in body (`before` block)
+SearchResource         | B      | yes   | CreateResource → ?resourceId= in query (`before` block)
 DeleteResource         | B      | yes   | CreateResource → /{resourceId} (creator in scenario, not `before`)
 DeleteUser             | B      | yes   | UserRegistration → /{userId} (`before` block)
 DeleteAccount          | D      | no    | register+login throwaway → delete throwaway
@@ -550,19 +570,34 @@ For every Class-B operation, wire a creator step that seeds the resource ID
 before the target request runs. Show the user each proposed chain in plain
 English before writing it.
 
-**Where the creator step goes depends on the target HTTP method:**
+**Where the creator step goes depends on whether the happy path consumes the
+seeded resource:**
 
-| Target method | Creator placement | Pattern in `scanconf-templates.md` |
-|---------------|-------------------|-------------------------------------|
-| GET, PUT, PATCH | Operation-level `before` block + single-step `happy.path` scenario | **Class-B — dependency chain, GET / PUT / PATCH** |
-| DELETE | First request inside `happy.path` `requests[]`, **not** in `before` | **Class-B — dependency chain, DELETE** |
+| Target operation | Creator placement | Pattern in `scanconf-templates.md` |
+|------------------|-------------------|-------------------------------------|
+| Non-destructive (GET, PUT, PATCH, or a body/query reader such as `POST /lookup`) | Operation-level `before` block + single-step `happy.path` scenario | **Class-B — dependency chain, GET / PUT / PATCH** |
+| Destructive (DELETE, or any operation whose happy path removes/consumes the seeded resource) | First request inside `happy.path` `requests[]`, **not** in `before` | **Class-B — dependency chain, DELETE** |
 
-**Why DELETE differs:** BOLA replays `happy.path` with User 2's credential on
-the delete step; a creator that lives only in `before` may not re-seed the
-resource before the replay, so the test returns 404 instead of 401/403 — a
-false BOLA failure. The full rationale, replay flow, and
+**Why destructive targets differ:** BOLA replays `happy.path` with User 2's
+credential on the target step; a creator that lives only in `before` may not
+re-seed the resource before the replay, so the test returns 404 instead of
+401/403 — a false BOLA failure. The full rationale, replay flow, and
 symptom-to-watch-for are documented with the DELETE pattern in the templates
-file.
+file. (Non-destructive targets are safe in `before` because the seeded resource
+survives to the replay — verified: the User 2 replay reads a resource seeded on
+an earlier User 1 run.)
+
+**Where the seeded ID is wired into the target request depends on the reference
+location** (from the Step 5 classification):
+
+| Reference location | Wire the `{{resourceId}}` variable into |
+|--------------------|------------------------------------------|
+| Path parameter  | the target request's `paths[]` array |
+| Query parameter | the target request's `queries[]` array |
+| Request-body field | the target request's `requestBody.json` (or matching body mode) |
+
+The creator/`before` wiring and the BOLA test definition are identical across
+all three — only the target request field that consumes the id changes.
 
 Do not consider a Class-B operation fully configured unless the creator step
 reliably seeds the resource and extracts the required identifier (`variableAssignments`

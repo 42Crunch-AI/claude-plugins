@@ -179,6 +179,31 @@ variable is intentionally resolved at the global level.
 
 To add a BOLA authorization test, append `"authorizationTests": ["<BolaTestName>"]` at the operation level.
 
+**Object-reference location — path / query / body.** The pattern above consumes
+the seeded id from a **path** parameter (`paths[]`). The object reference can
+equally sit in the **query string** or the **request body** — the `before`
+creator, the `variableAssignments`, and the BOLA test definition are all
+identical; only the target request's `details` field that consumes
+`{{<id-var>}}` changes. Swap the `paths` array in the target `request.details`
+for one of these:
+
+```json
+// Query reference — e.g. GET /search?orderId=...
+"queries": [{ "key": "<id-param>", "value": "{{<id-var>}}" }]
+```
+
+```json
+// Body reference — e.g. POST /lookup {"orderId": "..."}  (also POST /transfer,
+// /share, or any action-on-object call). One entry per referenced object.
+"requestBody": { "mode": "json", "json": { "<id-field>": "{{<id-var>}}" } }
+```
+
+A body carrying **multiple** references (e.g. `{ "fromAccountId": …,
+"toAccountId": … }`) is a distinct BOLA candidate on each reference; seed and
+wire each id the same way. This location-agnostic behavior is verified: the
+scanner seeds as User 1 and replays the target under User 2's token whether the
+id is in the path, query, or body.
+
 #### Class-B — dependency chain, DELETE (creator inside the scenario)
 
 Use when the Class-B **target operation is DELETE** and the happy path destroys
@@ -630,6 +655,7 @@ The key difference from an OAS-operation reference (`"$ref": "#/operations/<Oper
 | `environment` overrides in a step apply only to that step | Safe credential/variable swap without duplicating the operation |
 | For Class-B/Class-D creator calls, use step-level `environment` overrides unless variables are already resolved globally (`environments.default.variables`, global static defaults, or global `before` assignments) | Prevents unresolved template variables while allowing intentional global wiring |
 | Class-B DELETE: creator goes scenario-inline (first request in `happy.path`), never `before`-only | BOLA replay must seed a live resource; a `before`-only creator causes false 404 BOLA failures |
+| BOLA candidacy covers object references in the path, query, AND request body — not the path alone | Object references in `?id=` and in body fields (lookup, transfer, share) are equally exploitable (OWASP API1); the swap is credential-level, so it works identically in all three locations |
 | Never use `"skipped": true` on Class-D operations | The scanner ignores it and deletes the primary user, breaking subsequent tests |
 | Never override the token variable via `environment` to swap credentials on a Class-D operation | `authenticationDetails` tokens are cached at session start; environment overrides do not change which cached token is injected |
 | Class-D operations: set `"auth": ["AccessToken/<throwaway>"]` on the operation definition, not as a scenario-step override | The credential must be pinned at the operation level so the scanner uses the throwaway for ALL execution paths — happy path, fuzzing, and authorization tests |
