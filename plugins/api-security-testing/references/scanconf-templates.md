@@ -565,10 +565,16 @@ No additional scenario block is needed for either test — the scanner replays
 the operation's `happy.path` scenario (including its `before` blocks and all
 `scenarios[].requests[]` steps) with the swapped credential.
 
-**Result semantics:** a 2xx response on the authorization test is a
-**confirmed BOLA/BFLA finding**. A 401 or 403 means the server enforces
-authorization — not a finding. (A 404 on a DELETE usually means the creator
-step is misplaced — see the Class-B DELETE pattern above.)
+**Result semantics:** the engine's verdict is **status-only** — a 2xx on the
+swapped request is reported as a finding; 401/403 means the server enforces
+authorization (not a finding). A 2xx is a true finding for **state-changing**
+targets (PUT / PATCH / DELETE, or a POST that mutates) — the attacker operated
+on the victim's resource. For **read** targets (GET, or a lookup/search that
+returns the object) a 2xx can be a false positive: an owner-scoped endpoint that
+returns the *caller's own* data also answers 2xx. Confirm read findings by
+comparing the attacker's response body to the owner's — see `scan-workflow.md`
+Step 12a's authorization-confirmation pass. (A 404 on a DELETE usually means the
+creator step is misplaced — see the Class-B DELETE pattern above.)
 
 ---
 

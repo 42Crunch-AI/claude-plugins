@@ -221,24 +221,58 @@ end-to-end: the scanner seeds the resource as User 1 and replays the operation
 under User 2's token regardless of whether the id sits in the path, query, or
 body.
 
-Flag privileged operations (admin-only actions) separately as BFLA candidates
-even if they have no path ID parameter. Use these heuristics to detect them
-automatically; fall back to asking the user if none match:
+Flag privileged operations (admin-only or elevated-privilege actions) separately
+as BFLA candidates, even if they have no path ID parameter. **Recall matters
+more than precision here:** a missed candidate means BFLA is silently never
+tested for that operation, while an over-flagged one costs only one extra
+confirmation and admin-credential prompt. So flag on *any* of the signals below
+— and the most dangerous real-world BFLA is an admin-only action on a
+**normal-looking path with no explicit marker** (e.g. `DELETE /users/{id}`,
+`POST /orders/{id}/refund`), so do not rely on the name-based signals alone.
 
+**Explicit markers** (name/tag/scheme):
 - Path segment contains `admin`, `internal`, `management`, `staff`, `system`,
   or `superuser` (e.g. `/admin/users`, `/internal/reports`).
 - Operation is in a tag group named `Admin`, `Internal`, `Management`, or similar.
-- `security` requirement on the operation references a scheme whose name includes
-  `admin` or `superuser`.
-- Request body or parameter has a field whose enum or description restricts it to
-  admin use (e.g. `role: admin`).
-- If none of the above match and the OAS provides no clear signals, call
-  `AskUserQuestion`: `"I couldn't automatically detect any privileged operations.
-  Are there any admin-only or elevated-privilege endpoints I should test for
-  BFLA?"` — options: `["Yes — I'll flag them", "No — skip BFLA testing"]`.
+- `operationId` or `summary`/`description` implies privilege — e.g. `banUser`,
+  `promoteUser`, `impersonate`, `forceDelete`, `refund`, `approve`, or prose like
+  "admin only", "administrators", "elevated", "restricted", "internal use".
 
-This determines whether a second user (User 2) is needed before credential
-prompts are shown, so the user understands why they're being asked for two sets.
+**Structural signals** (catch the unmarked cases):
+- **Elevated security requirement** — the operation's `security` requires a
+  scheme, OAuth2 scope, or role the *baseline* operations don't (e.g. most
+  operations need scope `read`/`write` but this one needs `admin`/`manage`, or
+  an extra scheme). A per-operation `security` that differs from the API default
+  is a strong privilege signal.
+- **Cross-subject management** — a state-changing operation (POST/PUT/PATCH/DELETE)
+  that acts on an **arbitrary** user/tenant/resource identified in the path
+  (`/users/{id}`, `/accounts/{id}/status`) rather than the caller's own
+  (`/users/me`, `/profile`). Managing *another* subject's record is typically an
+  admin function.
+- **Sensitive action shape** — role/permission changes, account enable/disable/ban,
+  refunds/adjustments, config/settings/feature-flag writes, bulk or system
+  operations, or a request field constrained to privileged values (e.g.
+  `role: admin`, `isAdmin: true`).
+
+Compile the candidate list from all signals, then **confirm it with the user**
+rather than only asking when nothing matched — call `AskUserQuestion`:
+`"These operations look like they may require elevated privilege, so I'll test
+them for BFLA (function-level authorization): <list>. Should I test all of them,
+and are there any privileged operations I missed?"` — options: `["Test these —
+list looks right", "Let me add or remove some", "None of these are privileged —
+skip BFLA"]`. If the list is empty, still ask: `"I couldn't identify privileged
+operations automatically. Are there any admin-only or elevated-privilege
+endpoints I should test for BFLA?"` — options: `["Yes — I'll flag them", "No —
+skip BFLA testing"]`.
+
+Any confirmed BFLA candidate means an **admin / elevated-privilege credential is
+required** — a distinct identity from the BOLA User 2. Collect it in the
+credential step below (`{{adminUsername}}` / `{{adminPassword}}` or an admin
+token), pin each candidate's happy path to the admin credential, and wire the
+BFLA test (see Step 6). If the user skips BFLA, collect no admin credential and
+wire no BFLA test. Detecting BOLA and BFLA candidates up front is what
+determines how many identities the user is asked for (User 1 always; User 2 for
+BOLA; an admin for BFLA), so the credential prompts don't come as a surprise.
 
 ### Per-scheme credential collection
 
@@ -694,11 +728,19 @@ No additional scenario block is needed for either test — the scanner replays
 the operation's `happy.path` scenario (including its `before` blocks and all
 `scenarios[].requests[]` steps) with the swapped credential.
 
-**Result semantics:** a 2xx response on the authorization test is a
-**confirmed BOLA/BFLA finding**; 401/403 means the server enforces
-authorization — not a finding. For DELETE operations, ensure the creator is
-scenario-inline per the placement table above — a creator-only `before` block
-commonly causes false BOLA failures (404 instead of 403).
+**Result semantics:** the engine's authorization verdict is **status-only** —
+any 2xx on the swapped request is reported as a finding; 401/403 means the
+server enforces authorization (not a finding). This is correct for
+**state-changing** targets (PUT / PATCH / DELETE, or a POST that mutates the
+resource): a 2xx means the attacker's credential successfully operated on the
+victim's resource. For **read** targets (GET, or a lookup/search that returns
+the object) it can **false-positive** — an owner-scoped endpoint that ignores
+the client-supplied id and returns the *caller's own* data also answers 2xx
+without leaking anything. Confirm read findings by comparing response bodies
+(Step 12a's authorization-confirmation pass) before presenting them. For DELETE,
+also ensure the creator is scenario-inline per the placement table above — a
+creator-only `before` block commonly causes false BOLA failures (404 instead of
+403).
 
 ## Step 7 — Scan Config Validation Checkpoint
 
@@ -1002,7 +1044,13 @@ if isinstance(operations, dict):
     for section_name in ("authorizationRequestsResults", "conformanceRequestsResults", "customRequestsResults"):
       for entry in operation.get(section_name, []) or []:
         outcome = entry.get("outcome") or {}
-        if outcome.get("testSuccessful") is True:
+        # The engine's verdict is outcome.status: "correct" = the API behaved
+        # correctly (e.g. enforced 401/403 on an authorization swap, or accepted
+        # a partial-security scenario). testSuccessful is NOT a reliable
+        # discriminator — it is false even for correctly-enforced endpoints, so
+        # filtering on it alone reports secured endpoints as failures. Skip any
+        # entry the engine marked "correct".
+        if outcome.get("testSuccessful") is True or outcome.get("status") == "correct":
           continue
         test = entry.get("test") or {}
         severity = severity_from_criticality(outcome.get("criticality"))
@@ -1083,7 +1131,11 @@ if ($report -and $report.operations) {
       $entries = $op.$sectionName
       if (-not $entries) { continue }
       foreach ($entry in $entries) {
-        if ($entry.outcome -and $entry.outcome.testSuccessful -eq $true) { continue }
+        # Skip entries the engine marked "correct" (e.g. enforced 401/403 on an
+        # authorization swap). testSuccessful alone is false even for secured
+        # endpoints, so filtering on it reports them as failures. See the Python
+        # note above.
+        if ($entry.outcome -and ($entry.outcome.testSuccessful -eq $true -or $entry.outcome.status -eq 'correct')) { continue }
         $testKey = if ($entry.test -and $entry.test.key) { $entry.test.key } else { '?' }
         $severity = if ($entry.outcome) { Get-SeverityFromCriticality([int]$entry.outcome.criticality) } else { '' }
         $failures += "$opName,$testKey,$severity"
@@ -1159,6 +1211,110 @@ Then ask which (if any) findings the user wants to address.
 
 ## Step 12 — Display Results and Apply Fixes
 
+### 12a-0 — Confirm authorization findings (body-aware)
+
+Confirm each BOLA/BFLA finding the scan reported **before** rendering it. The
+engine's authorization verdict is **status-only** — it flags every 2xx on the
+swapped request — so read endpoints can false-positive: an owner-scoped endpoint
+that ignores the client-supplied id and returns the *caller's own* data also
+answers 2xx without leaking anything. Route each finding by the operation's
+read/write nature **from your Step 5 classification** (not HTTP method alone — a
+`POST` may be a lookup that returns an object, or a mutation):
+
+- **State-changing target** (PUT / PATCH / DELETE, or a POST/other you classified
+  as mutating): a 2xx is **confirmed** — the attacker's credential operated on
+  the victim's resource. The body is irrelevant; skip the comparison.
+- **Read target** (GET, or a POST/other you classified as returning the
+  referenced object): confirm only if the attacker received the **victim's**
+  data. Compare the attacker's response body against the legitimate owner's
+  (User 1 happy-path) body for the same operation — both are in the scan output
+  under `response.rawPayload` (base64 of the raw HTTP response): the owner's
+  under the operation's `scenarios`, the attacker's under
+  `authorizationRequestsResults`.
+
+Surface the evidence for every authorization finding:
+
+```bash
+# macOS / Linux
+python3 << 'EOF'
+import json, re, base64
+d = json.loads(re.search(r'\{[\s\S]*\}', open("/tmp/42c-scan-out.json").read()).group())
+ops = d.get("report", {}).get("operations", {})
+
+def body(b64):
+    if not b64: return None
+    raw = base64.b64decode(b64).decode("utf-8", "replace")
+    parts = re.split(r'\r?\n\r?\n', raw, maxsplit=1)
+    m = re.search(r'\{.*\}', parts[1] if len(parts) > 1 else raw, re.S)
+    return m.group() if m else None
+
+def owner_body(op):
+    for s in op.get("scenarios", []) or []:
+        for r in (s.get("requests") or [s]):
+            b = body((r.get("response") or {}).get("rawPayload"))
+            if b: return b
+    return None
+
+for opid, op in ops.items():
+    auth = [e for e in op.get("authorizationRequestsResults", []) or []
+            if "swapping" in (e.get("test") or {}).get("key", "")
+            and (e.get("outcome") or {}).get("status") == "defective"]
+    if not auth: continue
+    method = (op.get("method") or "").upper()
+    ob = owner_body(op)
+    for e in auth:
+        ab = body((e.get("response") or {}).get("rawPayload"))
+        same = ab is not None and ab == ob
+        print(f"{opid} [{method}] bodies_identical={same}")
+        print(f"    owner:    {(ob or '(none)')[:120]}")
+        print(f"    attacker: {(ab or '(none)')[:120]}")
+EOF
+```
+
+```powershell
+# Windows
+$raw = Get-Content "$env:TEMP\42c-scan-out.json" -Raw
+$d = ([regex]::Match($raw, '\{[\s\S]*\}')).Value | ConvertFrom-Json
+function Get-JsonBody($b64) {
+  if (-not $b64) { return $null }
+  $txt = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64))
+  $body = ($txt -split "(?s)\r?\n\r?\n", 2)[1]
+  $m = [regex]::Match([string]$body, '(?s)\{.*\}')
+  if ($m.Success) { $m.Value } else { $null }
+}
+foreach ($p in $d.report.operations.PSObject.Properties) {
+  $op = $p.Value
+  $auth = @($op.authorizationRequestsResults | Where-Object { $_.test.key -like '*swapping*' -and $_.outcome.status -eq 'defective' })
+  if (-not $auth) { continue }
+  $ob = $null
+  foreach ($s in $op.scenarios) {
+    $steps = @($s.requests); if (-not $steps) { $steps = @($s) }
+    foreach ($r in $steps) { $b = Get-JsonBody $r.response.rawPayload; if ($b) { $ob = $b; break } }
+    if ($ob) { break }
+  }
+  foreach ($e in $auth) {
+    $ab = Get-JsonBody $e.response.rawPayload
+    $same = ($ab -and $ab -eq $ob)
+    Write-Host "$($p.Name) [$($op.method.ToUpper())] bodies_identical=$same"
+    Write-Host "    owner:    $ob"
+    Write-Host "    attacker: $ab"
+  }
+}
+```
+
+Classify each **read** finding from the output:
+- `bodies_identical=True`, or the attacker body otherwise carries the victim's
+  distinguishing data → **confirmed** BOLA/BFLA; render in the 🔴 tier.
+- attacker body reflects only the **caller's own** data, or is empty/redacted →
+  **not confirmed** (owner-scoped 2xx). Do not render it as 🔴; list it under a
+  one-line note: *"Authorization — needs manual review: 2xx on the swap but no
+  cross-user data returned (likely owner-scoped)."*
+
+Byte-identical bodies are the strong positive signal. When bodies differ only in
+non-deterministic fields (timestamps, echoed request ids), judge by whether the
+attacker's body contains the victim's distinguishing values, not strict equality.
+State-changing findings from the routing above are confirmed without this check.
+
 ### 12a — Render the risk-classified findings report
 
 Before touching anything, display the full scan picture grouped into three tiers.
@@ -1181,7 +1337,7 @@ Scan Results  |  SQG: N/A (Token mode — no scan SQG enforced)
 
 ```
 ── 🔴 Authorization Failures (BOLA / BFLA) ────────────────────────────────
-  (for each confirmed auth failure)
+  (for each finding confirmed in 12a-0 — owner-scoped 2xx go to "needs review", not here)
   Operation:  <HTTP method> <path>
   Test:       BOLA (accessed with user-2 token) / BFLA (accessed with low-priv token)
   Risk:       Horizontal privilege escalation — user B can read/modify user A's
@@ -1236,14 +1392,14 @@ Mandatory behavior:
 - If a tier is empty, say so explicitly; do not silently omit it.
 
 **Platform mode:**
-1. All **authorization failures** (BOLA/BFLA confirmed) → always a fix candidate.
+1. All **authorization failures confirmed in 12a-0** (BOLA/BFLA) → always a fix candidate. "Needs review" owner-scoped 2xx are **not** fix candidates — they are surfaced for manual review only.
 2. **Conformance findings matched in `sqgDetails[].blockingRules`** → fix candidate
    regardless of severity.
 3. Conformance findings **not** in `sqgDetails[].blockingRules` → surface only;
    do not include in the fix list.
 
 **Token mode:**
-1. All **authorization failures** (BOLA/BFLA confirmed) → always a fix candidate.
+1. All **authorization failures confirmed in 12a-0** (BOLA/BFLA) → always a fix candidate. "Needs review" owner-scoped 2xx are **not** fix candidates — they are surfaced for manual review only.
 2. There are no SQG-blocking conformance findings — all conformance findings are
    informational. Surface them to the user and ask which (if any) they want to fix.
 
