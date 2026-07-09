@@ -114,6 +114,15 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists **on disk**.
     scheme. Update/wire that default entry as needed; do not create an additional
     User 1 credential unless the user explicitly asks for multiple primary
     identities.
+- Set `runtimeConfiguration.reportGenerateCurlCommand` to `false`. The binary
+  generates it as `true`, which embeds a full curl string in every test
+  request — roughly 9% of the report's bytes — that this workflow never reads
+  (body-aware authorization confirmation in Step 12a-0 uses `response.rawPayload`,
+  not the curl field). Turning it off shrinks the report file and speeds parsing
+  at no cost to any step.
+  ```json
+  "reportGenerateCurlCommand": false
+  ```
 
 ### 1c — Write target URL to config
 
@@ -791,31 +800,42 @@ Leave `laxTestingModeEnabled` at its generated default (`false`). Never set it
 to `true` before happy paths are confirmed — in lax mode, fuzzing runs even on
 operations with failing happy paths, producing a cascade of false positives.
 
+Write the report to a file with `--output` (clean, directly parseable JSON);
+the small status object — `statusCode`, `statusMessage`, `sqgPass`,
+`sqgDetails` — prints to stdout, so redirect it to a separate status file. Do
+**not** use `2>&1`: the binary emits its logs inside the stdout JSON object
+(`logs[]`), not to stderr, so the status file stays pure JSON. This replaces
+the old single-stream capture that required regex-extracting JSON from a
+1.6MB+ log-contaminated blob.
+
 ```bash
 # macOS / Linux — Platform mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan run --enrich=false \
-  <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
+  --output /tmp/42c-happy-report.json --output-format json \
+  <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-happy-status.json
 
 # macOS / Linux — Token mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
-<binary> scan run --enrich=false <relative-oas-path> \
-  --freemium-host stateless.42crunch.com:443 \
-  --token "$TRIAL_TOKEN" --conf-file <CONF_FILE> > /tmp/42c-happy-out.json 2>&1
+<binary> scan run --enrich=false \
+  --freemium-host stateless.42crunch.com:443 --token "$TRIAL_TOKEN" \
+  --output /tmp/42c-happy-report.json --output-format json \
+  <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-happy-status.json
 ```
 
 ```powershell
 # Windows — Platform mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
-& <binary> scan run --enrich=false <relative-oas-path> --conf-file <CONF_FILE> `
-  > "$env:TEMP\42c-happy-out.json" 2>&1
+& <binary> scan run --enrich=false `
+  --output "$env:TEMP\42c-happy-report.json" --output-format json `
+  <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-happy-status.json"
 
 # Windows — Token mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
-& <binary> scan run --enrich=false <relative-oas-path> `
-  --freemium-host stateless.42crunch.com:443 `
-  --token $env:TRIAL_TOKEN --conf-file <CONF_FILE> `
-  > "$env:TEMP\42c-happy-out.json" 2>&1
+& <binary> scan run --enrich=false `
+  --freemium-host stateless.42crunch.com:443 --token $env:TRIAL_TOKEN `
+  --output "$env:TEMP\42c-happy-report.json" --output-format json `
+  <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-happy-status.json"
 ```
 
 Extract only failing happy paths — never include raw output in your response.
@@ -826,12 +846,13 @@ Extract only failing happy paths — never include raw output in your response.
 ```bash
 # macOS / Linux
 python3 << 'EOF'
-import json, re
-raw = open("/tmp/42c-happy-out.json").read()
-match = re.search(r'\{[\s\S]*\}', raw)
-if not match:
-    print("No JSON in output"); exit(0)
-data = json.loads(match.group())
+import json
+status = json.load(open("/tmp/42c-happy-status.json"))
+if status.get("statusCode") != 0:
+    print(f"scan_error: statusCode={status.get('statusCode')} {status.get('statusMessage','')}")
+    raise SystemExit(0)
+# Reconstruct the combined shape from the clean status + report files
+data = {**status, "report": json.load(open("/tmp/42c-happy-report.json"))}
 results = data.get("results", data.get("scanResults", []))
 if isinstance(results, dict):
     results = [results]
@@ -852,10 +873,11 @@ EOF
 
 ```powershell
 # Windows
-$raw = Get-Content "$env:TEMP\42c-happy-out.json" -Raw
-$jsonMatch = [regex]::Match($raw, '\{[\s\S]*\}')
-if (-not $jsonMatch.Success) { Write-Host "No JSON in output"; exit }
-$data = $jsonMatch.Value | ConvertFrom-Json
+$status = Get-Content "$env:TEMP\42c-happy-status.json" -Raw | ConvertFrom-Json
+if ($status.statusCode -ne 0) { Write-Host "scan_error: statusCode=$($status.statusCode) $($status.statusMessage)"; exit }
+# Reconstruct the combined shape from the clean status + report files
+$report = Get-Content "$env:TEMP\42c-happy-report.json" -Raw | ConvertFrom-Json
+$data = $status | Select-Object *; $data | Add-Member -NotePropertyName report -NotePropertyValue $report -Force
 $results = if ($data.results) { $data.results } elseif ($data.scanResults) { $data.scanResults } else { @() }
 if ($results -is [PSCustomObject]) { $results = @($results) }
 $fails = @()
@@ -903,7 +925,7 @@ failing operation before requesting manual input.
 
 ### Iteration
 
-After resolving each batch of failures, re-run using the same command as above (output to `/tmp/42c-happy-out.json` on macOS/Linux, `%TEMP%\42c-happy-out.json` on Windows) and re-extract with the same extraction snippet above.
+After resolving each batch of failures, re-run using the same command as above (report to `/tmp/42c-happy-report.json` + status to `/tmp/42c-happy-status.json` on macOS/Linux, the `%TEMP%` equivalents on Windows) and re-extract with the same extraction snippet above.
 
 For each operation where the root cause cannot be resolved (e.g. the required
 resource cannot be created in this environment), call `AskUserQuestion`:
@@ -955,43 +977,53 @@ Only proceed to Step 10 after explicit confirmation.
 
 ## Step 10 — Full Scan
 
-Run the full scan, capturing output to a temp file for extraction:
+Run the full scan. As in Step 8, write the report to a file with `--output`
+(clean JSON) and redirect the small stdout status object to a separate status
+file — no `2>&1`. The status object carries `statusCode`, `statusMessage`,
+`sqgPass`, and `sqgDetails`, so the pass/fail verdict and blocking rules are
+read from a <1KB file; the multi-MB report file is only opened to render
+findings.
 
 ```bash
 # macOS / Linux — Platform mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan run --enrich=false --report-sqg \
-  <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
+  --output /tmp/42c-scan-report.json --output-format json \
+  <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-status.json
 
 # macOS / Linux — Token mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
-<binary> scan run --enrich=false <relative-oas-path> \
-  --freemium-host stateless.42crunch.com:443 \
-  --token "$TRIAL_TOKEN" --conf-file <CONF_FILE> > /tmp/42c-scan-out.json 2>&1
+<binary> scan run --enrich=false \
+  --freemium-host stateless.42crunch.com:443 --token "$TRIAL_TOKEN" \
+  --output /tmp/42c-scan-report.json --output-format json \
+  <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-status.json
 ```
 
 ```powershell
 # Windows — Platform mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
-& <binary> scan run --enrich=false --report-sqg <relative-oas-path> --conf-file <CONF_FILE> `
-  > "$env:TEMP\42c-scan-out.json" 2>&1
+& <binary> scan run --enrich=false --report-sqg `
+  --output "$env:TEMP\42c-scan-report.json" --output-format json `
+  <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-scan-status.json"
 
 # Windows — Token mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
-& <binary> scan run --enrich=false <relative-oas-path> `
-  --freemium-host stateless.42crunch.com:443 `
-  --token $env:TRIAL_TOKEN --conf-file <CONF_FILE> `
-  > "$env:TEMP\42c-scan-out.json" 2>&1
+& <binary> scan run --enrich=false `
+  --freemium-host stateless.42crunch.com:443 --token $env:TRIAL_TOKEN `
+  --output "$env:TEMP\42c-scan-report.json" --output-format json `
+  <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-scan-status.json"
 ```
 
 **Immediately after the command completes**, extract the summary as TOON
 (Token-Oriented Object Notation — https://github.com/toon-format/toon) —
-never include raw stdout content in your response.
+never include raw report content in your response.
 
 > **SQG field location — common mistake to avoid:**
-> The SQG verdict is at `data["sqgPass"]` (a boolean) at the **root level** of
-> the parsed JSON — it is NOT nested inside `data["sqg"]`. Always read `data.get("sqgPass")`
-> and check whether the key is present. Always use the prescribed extraction snippet
+> The SQG verdict is `sqgPass` (a boolean) at the **root of the status object**
+> (`/tmp/42c-scan-status.json`) — NOT nested inside the report, and not under a
+> `sqg` key. The extraction snippet reconstructs `data = {**status, "report":
+> <report>}`, so `data.get("sqgPass")` and `data.get("sqgDetails")` read from
+> the status object exactly as before. Always use the prescribed extraction snippet
 > below rather than writing a custom parser, to avoid reading the wrong field.
 
 > **Platform note**: macOS/Linux use the Python snippet below. Windows users
@@ -1000,15 +1032,15 @@ never include raw stdout content in your response.
 ```bash
 # macOS / Linux
 python3 << 'EOF'
-import json, re
+import json
 
-raw = open("/tmp/42c-scan-out.json").read()
-match = re.search(r'\{[\s\S]*\}', raw)
-if not match:
-  print("No JSON found in scan output")
+status = json.load(open("/tmp/42c-scan-status.json"))
+if status.get("statusCode") != 0:
+  print(f"scan_error: statusCode={status.get('statusCode')} {status.get('statusMessage','')}")
   raise SystemExit(0)
 
-data = json.loads(match.group())
+# Reconstruct the combined shape from the clean status + report files
+data = {**status, "report": json.load(open("/tmp/42c-scan-report.json"))}
 report = data.get("report", {})
 summary = report.get("summary", {})
 
@@ -1091,10 +1123,11 @@ EOF
 
 ```powershell
 # Windows
-$raw = Get-Content "$env:TEMP\42c-scan-out.json" -Raw
-$jsonMatch = [regex]::Match($raw, '\{[\s\S]*\}')
-if (-not $jsonMatch.Success) { Write-Host "No JSON found in scan output"; exit }
-$data = $jsonMatch.Value | ConvertFrom-Json
+$status = Get-Content "$env:TEMP\42c-scan-status.json" -Raw | ConvertFrom-Json
+if ($status.statusCode -ne 0) { Write-Host "scan_error: statusCode=$($status.statusCode) $($status.statusMessage)"; exit }
+# Reconstruct the combined shape from the clean status + report files
+$reportContent = Get-Content "$env:TEMP\42c-scan-report.json" -Raw | ConvertFrom-Json
+$data = $status | Select-Object *; $data | Add-Member -NotePropertyName report -NotePropertyValue $reportContent -Force
 $report = if ($data.report) { $data.report } else { $null }
 $summary = if ($report -and $report.summary) { $report.summary } else { $null }
 $sqg = if ($null -ne $data.sqgPass) { if ($data.sqgPass) { 'PASSED' } else { 'FAILED' } } else { 'N/A' }
@@ -1238,7 +1271,7 @@ Surface the evidence for every authorization finding:
 # macOS / Linux
 python3 << 'EOF'
 import json, re, base64
-d = json.loads(re.search(r'\{[\s\S]*\}', open("/tmp/42c-scan-out.json").read()).group())
+d = {"report": json.load(open("/tmp/42c-scan-report.json"))}
 ops = d.get("report", {}).get("operations", {})
 
 def body(b64):
@@ -1273,8 +1306,8 @@ EOF
 
 ```powershell
 # Windows
-$raw = Get-Content "$env:TEMP\42c-scan-out.json" -Raw
-$d = ([regex]::Match($raw, '\{[\s\S]*\}')).Value | ConvertFrom-Json
+$reportContent = Get-Content "$env:TEMP\42c-scan-report.json" -Raw | ConvertFrom-Json
+$d = [PSCustomObject]@{ report = $reportContent }
 function Get-JsonBody($b64) {
   if (-not $b64) { return $null }
   $txt = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64))
