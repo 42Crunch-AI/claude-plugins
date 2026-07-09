@@ -115,16 +115,27 @@ or
 
 ---
 
-## Recipe 6 — Generate OAS from Code, Then Audit
+## Recipe 6 — Generate OAS, Then Audit
 
 **When to use**: You don't have an OAS file yet — you want to generate one
-from your API source code and then immediately audit it.
+from your API source code, a Postman or Insomnia collection, or both, and
+then immediately audit it.
 
 **What to say**:
 > "Generate an OpenAPI spec from my code and then audit it"
 
+or
+
+> "Generate an OpenAPI spec from my Postman collection and then audit it"
+
+or
+
+> "Generate an OpenAPI spec from my Insomnia collection and then audit it"
+
 **What happens**:
-1. `code-to-oas` skill runs and writes `openapi.json`
+1. `generate-oas` skill asks whether you have a codebase and/or a Postman or
+   Insomnia collection, then writes `openapi.json` from whichever source(s)
+   you provide.
 2. `42crunch-audit` skill runs on the generated file
 3. Findings shown and fixes optionally applied
 
@@ -159,4 +170,4 @@ or
 | Review findings with your team before fixing | Recipe 3 |
 | Audit + live scan in one session | Recipe 4 |
 | OAS is clean, server is running — scan only | Recipe 5 |
-| No OAS file yet, generate from code first | Recipe 6 |
+| No OAS file yet, generate from code and/or Postman/Insomnia first | Recipe 6 |

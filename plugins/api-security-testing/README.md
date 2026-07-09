@@ -14,8 +14,7 @@ The `42crunch-api-security-testing` plugin is designed for AI-assisted developme
 | [`/42crunch-audit`](./README.md#42crunch-audit) | Static security audit of an OpenAPI Specification file with scored findings and AI-assisted fixes |
 | [`/42crunch-scan`](./README.md#42crunch-scan) | Live conformance and authorization scan (BOLA/BFLA) against a running API |
 | [`/42crunch-api-security-testing`](./README.md#42crunch-api-security-testing) | Full audit + scan pipeline in a single session |
-| [`/code-to-oas`](./README.md#code-to-oas) | Generate a complete `openapi.json` from your API source code |
-| [`/postman-to-oas`](./README.md#postman-to-oas) | Convert a Postman collection (v2.0 or v2.1) into a complete OpenAPI 3.0 specification |
+| [`/generate-oas`](./README.md#generate-oas) | Generate a complete `openapi.json` from your API source code, a Postman collection, or both |
 
 ## Prerequisites
 
@@ -57,7 +56,7 @@ See [RECIPES.md](./RECIPES.md) for step-by-step guides covering the most common 
 - **Review-only mode** — see findings without applying any fixes
 - **Full pipeline** (audit + scan) in a single session
 - **Scan only** when the audit is already passing
-- **Generating an OAS** from source code, then auditing it immediately
+- **Generating an OAS** from source code and/or a Postman collection, then auditing it immediately
 
 ## Skills
 
@@ -145,39 +144,30 @@ Claude will prompt for:
 
 ---
 
-### `code-to-oas`
+### `generate-oas`
 
-Analyses your API codebase and generates a complete `openapi.json`. Detects routes, parameters, request/response schemas, auth middleware, data models, and server config. Performs a self-review pass before writing the file.
+Generates a complete `openapi.json` from an API codebase, a Postman or Insomnia collection, or both. Claude asks which sources are available and uses whichever you provide:
+
+- **Codebase only** — detects routes, parameters, request/response schemas, auth middleware, data models, and server config from the source.
+- **Postman collection only** — extracts paths, methods, parameters, request/response bodies, headers, and auth schemes from a v2.0/v2.1 collection (and optional environment file), resolving `{{variableName}}` placeholders.
+- **Insomnia collection only** — extracts the same contract details from a v4 (JSON) or v5 (JSON or YAML) export, resolving `{{ variableName }}`/`{{ _.variableName }}` templating. Insomnia exports carry no saved example responses, so response shapes are best-effort placeholders unless a codebase is also provided.
+- **Codebase + collection** — the codebase is treated as the structural source of truth; the collection enriches the result with real example values and surfaces any endpoint the codebase analysis missed.
+
+Deduplicates schemas into `components/schemas` and performs a self-review pass before writing the file.
 
 Supported frameworks: Express, Fastify, Koa, Hapi, NestJS, FastAPI, Flask, Django, Starlette, Spring Boot, Quarkus, Micronaut, Gin, Echo, Chi, Gorilla/mux, Rails, Sinatra, Grape, ASP.NET Core, and more.
 
-> **Trigger:** "generate OAS from code", "create OpenAPI spec", "document my API", "reverse-engineer spec", "write openapi.json from my codebase"
+> **Trigger:** "generate OAS", "create OpenAPI spec", "document my API", "reverse-engineer spec", "write openapi.json from my codebase", "convert postman to openapi", "convert insomnia to openapi", "postman collection to OAS", "insomnia collection to OAS", "generate spec from postman"
 
 **Usage:**
 ```
-/code-to-oas
+/generate-oas
 ```
 
 Claude will prompt for:
-1. Working directory of API source code
-
----
-
-### `postman-to-oas`
-
-Reads a Postman collection (v2.0 or v2.1) and an optional environment file, then generates a complete `openapi.json` (OAS 3.0). Extracts paths, methods, path/query/header parameters, request bodies, response bodies, response headers, and auth schemes. Resolves `{{variableName}}` placeholders from the environment file or collection variables. Deduplicates schemas into `components/schemas` using resource names derived from path segments, and performs a self-review pass before writing the output file.
-
-> **Trigger:** "convert postman to openapi", "postman collection to OAS", "generate spec from postman", "create openapi from postman"
-
-**Usage:**
-```
-/postman-to-oas
-```
-
-Claude will prompt for:
-1. Postman collection file path (JSON, v2.0 or v2.1)
-2. Postman environment file path (optional)
-3. Output file path (default: `openapi.json` in the collection's directory)
+1. Whether you have an API codebase, and if so, its location
+2. Whether you have a Postman or Insomnia collection, and if so, its file path (and an optional environment file path)
+3. Output file path (default: `openapi.json` at the codebase root, or next to the collection file)
 
 ---
 
