@@ -3,11 +3,11 @@
 > **Command conventions used throughout this file**
 > - `<binary>` — the full path resolved during binary discovery (e.g. `~/.42crunch/bin/42c-ast`). Never call `42c-ast` by name alone unless it is confirmed to be on PATH.
 > - **Never write a literal credential value into a command.** Load credentials from the conf file into the environment first, then let the command inherit them — the raw value must never appear in a command string, tool output, or chat message.
-> - **Platform mode**: before every command, load credentials — macOS/Linux: `set -a; . "$HOME/.42crunch/conf/env"; set +a`; Windows: `Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }`. The command then inherits `API_KEY`/`PLATFORM_HOST` — no explicit prefix needed.
-> - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` (macOS/Linux) or `--token $env:TRIAL_TOKEN` (Windows) to every command — never the literal token.
+> - **Platform mode**: before every command, load credentials with `set -a; . "$HOME/.42crunch/conf/env"; set +a`. The command then inherits `API_KEY`/`PLATFORM_HOST` — no explicit prefix needed.
+> - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` to every command — never the literal token.
+> - **Windows**: all command/extraction blocks in this file are macOS/Linux; use the PowerShell equivalents in `./windows-commands.md` (keyed by step), including its credential-loading and string-quoting conventions.
 > - **OAS analysis is done once, in the calling skill.** The skill's scan-preview step already extracted the operation count, auth scheme types, BOLA/BFLA candidates, and sample-data presence. Reuse those results throughout Steps 2–5 — do not re-read the OAS to re-derive facts already established this conversation. Open the OAS only to look up detail not yet extracted (e.g. a specific operation's schema or examples).
-> - **PowerShell string quoting**: when a variable is immediately followed by `:` inside a double-quoted string, PowerShell parses `$varName:` as a PSDrive reference (like `$env:TEMP`) and throws `InvalidVariableReferenceWithDrive`. Always use `${varName}` to delimit the name — e.g. `"${opName}: ..."` not `"$opName: ..."`. This applies to any inline PowerShell generated during the session, not just the static snippets below.
-> - **Runtime overrides via `SCAN42C_*` env vars (do not edit the scan config for these).** `scan run` reads its whole `runtimeConfiguration` from the environment, so behaviour that varies per run is set with an env var prefixed on the command — never by mutating the committed `scanconf.json`. This workflow uses three (each scoped to the single command; a fresh shell per invocation means they never leak to the next run): `SCAN42C_HAPPY_PATH_ONLY=true` (happy-path validation run only — replaces toggling `happyPathOnly` in the config), `SCAN42C_REPORT_GENERATE_CURL_COMMAND=false` (every run — drops the per-request curl strings the workflow never reads), and `SCAN42C_REPORT_ISSUES_ONLY=true` (full scan only — ~23% smaller report; keeps happy-path scenarios and their `response.rawPayload`, keeps failing/defective conformance and authorization results, drops only the passing test details the extraction already discards). macOS/Linux: prefix `VAR=value` before `<binary>`. Windows: set `$env:VAR='value'` on the line before the `& <binary>` call.
+> - **Runtime overrides via `SCAN42C_*` env vars (do not edit the scan config for these).** `scan run` reads its whole `runtimeConfiguration` from the environment, so behaviour that varies per run is set with an env var prefixed on the command — never by mutating the committed `scanconf.json`. This workflow uses three (each scoped to the single command; a fresh shell per invocation means they never leak to the next run): `SCAN42C_HAPPY_PATH_ONLY=true` (happy-path validation run only — replaces toggling `happyPathOnly` in the config), `SCAN42C_REPORT_GENERATE_CURL_COMMAND=false` (every run — drops the per-request curl strings the workflow never reads), and `SCAN42C_REPORT_ISSUES_ONLY=true` (full scan only — ~23% smaller report; keeps happy-path scenarios and their `response.rawPayload`, keeps failing/defective conformance and authorization results, drops only the passing test details the extraction already discards). Prefix `VAR=value` before `<binary>` (Windows form: `./windows-commands.md`).
 
 ---
 
@@ -818,9 +818,7 @@ Write the report to a file with `--output` (clean, directly parseable JSON);
 the small status object — `statusCode`, `statusMessage`, `sqgPass`,
 `sqgDetails` — prints to stdout, so redirect it to a separate status file. Do
 **not** use `2>&1`: the binary emits its logs inside the stdout JSON object
-(`logs[]`), not to stderr, so the status file stays pure JSON. This replaces
-the old single-stream capture that required regex-extracting JSON from a
-1.6MB+ log-contaminated blob.
+(`logs[]`), not to stderr, so the status file stays pure JSON.
 
 ```bash
 # macOS / Linux — Platform mode
@@ -839,27 +837,9 @@ SCAN42C_HAPPY_PATH_ONLY=true SCAN42C_REPORT_GENERATE_CURL_COMMAND=false \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-happy-status.json
 ```
 
-```powershell
-# Windows — Platform mode
-Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
-$env:SCAN42C_HAPPY_PATH_ONLY='true'; $env:SCAN42C_REPORT_GENERATE_CURL_COMMAND='false'
-& <binary> scan run --enrich=false `
-  --output "$env:TEMP\42c-happy-report.json" --output-format json `
-  <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-happy-status.json"
-
-# Windows — Token mode
-Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
-$env:SCAN42C_HAPPY_PATH_ONLY='true'; $env:SCAN42C_REPORT_GENERATE_CURL_COMMAND='false'
-& <binary> scan run --enrich=false `
-  --freemium-host stateless.42crunch.com:443 --token $env:TRIAL_TOKEN `
-  --output "$env:TEMP\42c-happy-report.json" --output-format json `
-  <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-happy-status.json"
-```
+*Windows:* `./windows-commands.md` → **Scan — Step 8 (run)**.
 
 Extract only failing happy paths — never include raw output in your response.
-
-> **Platform note**: macOS/Linux use the Python snippet below. Windows users
-> should use the PowerShell equivalent that follows.
 
 ```bash
 # macOS / Linux
@@ -889,34 +869,7 @@ else:
 EOF
 ```
 
-```powershell
-# Windows
-$status = Get-Content "$env:TEMP\42c-happy-status.json" -Raw | ConvertFrom-Json
-if ($status.statusCode -ne 0) { Write-Host "scan_error: statusCode=$($status.statusCode) $($status.statusMessage)"; exit }
-# Reconstruct the combined shape from the clean status + report files
-$report = Get-Content "$env:TEMP\42c-happy-report.json" -Raw | ConvertFrom-Json
-$data = $status | Select-Object *; $data | Add-Member -NotePropertyName report -NotePropertyValue $report -Force
-$results = if ($data.results) { $data.results } elseif ($data.scanResults) { $data.scanResults } else { @() }
-if ($results -is [PSCustomObject]) { $results = @($results) }
-$fails = @()
-foreach ($r in $results) {
-    foreach ($t in $r.testResults) {
-        if ($t.status -eq 'fail' -and $t.testKey -match 'happy') {
-            $op     = if ($r.operationId) { $r.operationId } elseif ($r.path) { $r.path } else { '?' }
-            $test   = if ($t.testKey) { $t.testKey } else { '?' }
-            $code   = if ($t.httpStatus) { $t.httpStatus } else { '' }
-            $reason = if ($t.reason) { $t.reason.Substring(0, [Math]::Min(60, $t.reason.Length)) } else { '' }
-            $fails += "$op,$test,$code,$reason"
-        }
-    }
-}
-if ($fails.Count -gt 0) {
-    Write-Host "happy_path_failures[$($fails.Count)]{operation,test,status,reason}:"
-    foreach ($f in $fails) { Write-Host "  $f" }
-} else {
-    Write-Host "happy_path_failures: none"
-}
-```
+*Windows:* `./windows-commands.md` → **Scan — Step 8 (extraction)**.
 
 ### Parse results per operation
 
@@ -1018,22 +971,7 @@ SCAN42C_REPORT_GENERATE_CURL_COMMAND=false SCAN42C_REPORT_ISSUES_ONLY=true \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-status.json
 ```
 
-```powershell
-# Windows — Platform mode
-Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
-$env:SCAN42C_REPORT_GENERATE_CURL_COMMAND='false'; $env:SCAN42C_REPORT_ISSUES_ONLY='true'
-& <binary> scan run --enrich=false --report-sqg `
-  --output "$env:TEMP\42c-scan-report.json" --output-format json `
-  <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-scan-status.json"
-
-# Windows — Token mode
-Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
-$env:SCAN42C_REPORT_GENERATE_CURL_COMMAND='false'; $env:SCAN42C_REPORT_ISSUES_ONLY='true'
-& <binary> scan run --enrich=false `
-  --freemium-host stateless.42crunch.com:443 --token $env:TRIAL_TOKEN `
-  --output "$env:TEMP\42c-scan-report.json" --output-format json `
-  <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-scan-status.json"
-```
+*Windows:* `./windows-commands.md` → **Scan — Step 10 (run)**.
 
 **Immediately after the command completes**, extract the summary as TOON
 (Token-Oriented Object Notation — https://github.com/toon-format/toon) —
@@ -1046,9 +984,6 @@ never include raw report content in your response.
 > <report>}`, so `data.get("sqgPass")` and `data.get("sqgDetails")` read from
 > the status object exactly as before. Always use the prescribed extraction snippet
 > below rather than writing a custom parser, to avoid reading the wrong field.
-
-> **Platform note**: macOS/Linux use the Python snippet below. Windows users
-> should use the PowerShell equivalent that follows.
 
 ```bash
 # macOS / Linux
@@ -1142,85 +1077,7 @@ else:
 EOF
 ```
 
-```powershell
-# Windows
-$status = Get-Content "$env:TEMP\42c-scan-status.json" -Raw | ConvertFrom-Json
-if ($status.statusCode -ne 0) { Write-Host "scan_error: statusCode=$($status.statusCode) $($status.statusMessage)"; exit }
-# Reconstruct the combined shape from the clean status + report files
-$reportContent = Get-Content "$env:TEMP\42c-scan-report.json" -Raw | ConvertFrom-Json
-$data = $status | Select-Object *; $data | Add-Member -NotePropertyName report -NotePropertyValue $reportContent -Force
-$report = if ($data.report) { $data.report } else { $null }
-$summary = if ($report -and $report.summary) { $report.summary } else { $null }
-$sqg = if ($null -ne $data.sqgPass) { if ($data.sqgPass) { 'PASSED' } else { 'FAILED' } } else { 'N/A' }
-Write-Host "sqgPass: $sqg"
-foreach ($d in $data.sqgDetails) {
-    if ($d.blockingRules -and $d.blockingRules.Count -gt 0) {
-        Write-Host "blockingRules[$($d.blockingRules.Count)]: $($d.blockingRules -join ', ')"
-    }
-}
-if ($summary -and $summary.authorizationTestRequests -and $summary.authorizationTestRequests.executed) {
-  Write-Host "authorizationRequests: $($summary.authorizationTestRequests.executed.total)"
-}
-if ($summary -and $summary.issues) {
-  Write-Host "issuesTotal: $($summary.issues.total)"
-}
-
-function Get-SeverityFromCriticality {
-  param([int]$criticality)
-  switch ($criticality) {
-    5 { 'critical' }
-    4 { 'high' }
-    3 { 'medium' }
-    2 { 'low' }
-    default { 'info' }
-  }
-}
-
-$failures = @()
-if ($report -and $report.operations) {
-  $report.operations.PSObject.Properties | ForEach-Object {
-    $opName = $_.Name
-    $op = $_.Value
-    foreach ($sectionName in @('authorizationRequestsResults', 'conformanceRequestsResults', 'customRequestsResults')) {
-      $entries = $op.$sectionName
-      if (-not $entries) { continue }
-      foreach ($entry in $entries) {
-        # Skip entries the engine marked "correct" (e.g. enforced 401/403 on an
-        # authorization swap). testSuccessful alone is false even for secured
-        # endpoints, so filtering on it reports them as failures. See the Python
-        # note above.
-        if ($entry.outcome -and ($entry.outcome.testSuccessful -eq $true -or $entry.outcome.status -eq 'correct')) { continue }
-        $testKey = if ($entry.test -and $entry.test.key) { $entry.test.key } else { '?' }
-        $severity = if ($entry.outcome) { Get-SeverityFromCriticality([int]$entry.outcome.criticality) } else { '' }
-        $failures += "$opName,$testKey,$severity"
-      }
-    }
-  }
-}
-
-if ($failures.Count -eq 0) {
-$results = if ($data.results) { $data.results } elseif ($data.scanResults) { $data.scanResults } else { @() }
-if ($results -is [PSCustomObject]) { $results = @($results) }
-foreach ($r in $results) {
-    foreach ($t in $r.testResults) {
-        if ($t.status -eq 'fail') {
-            $op  = if ($r.operationId) { $r.operationId } elseif ($r.path) { $r.path } else { '?' }
-            $test = if ($t.testKey) { $t.testKey } else { '?' }
-            $sev  = if ($t.severity) { $t.severity } else { '' }
-            $failures += "$op,$test,$sev"
-        }
-    }
-}
-}
-
-$failures = $failures | Select-Object -Unique
-if ($failures.Count -gt 0) {
-    Write-Host "`nfailures[$($failures.Count)]{operation,test,severity}:"
-    foreach ($f in $failures) { Write-Host "  $f" }
-} else {
-    Write-Host "failures: none"
-}
-```
+*Windows:* `./windows-commands.md` → **Scan — Step 10 (extraction)**.
 
 Use only the TOON output above when rendering Step 12. Do not load or display
 the raw scan output file content.
@@ -1325,36 +1182,7 @@ for opid, op in ops.items():
 EOF
 ```
 
-```powershell
-# Windows
-$reportContent = Get-Content "$env:TEMP\42c-scan-report.json" -Raw | ConvertFrom-Json
-$d = [PSCustomObject]@{ report = $reportContent }
-function Get-JsonBody($b64) {
-  if (-not $b64) { return $null }
-  $txt = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64))
-  $body = ($txt -split "(?s)\r?\n\r?\n", 2)[1]
-  $m = [regex]::Match([string]$body, '(?s)\{.*\}')
-  if ($m.Success) { $m.Value } else { $null }
-}
-foreach ($p in $d.report.operations.PSObject.Properties) {
-  $op = $p.Value
-  $auth = @($op.authorizationRequestsResults | Where-Object { $_.test.key -like '*swapping*' -and $_.outcome.status -eq 'defective' })
-  if (-not $auth) { continue }
-  $ob = $null
-  foreach ($s in $op.scenarios) {
-    $steps = @($s.requests); if (-not $steps) { $steps = @($s) }
-    foreach ($r in $steps) { $b = Get-JsonBody $r.response.rawPayload; if ($b) { $ob = $b; break } }
-    if ($ob) { break }
-  }
-  foreach ($e in $auth) {
-    $ab = Get-JsonBody $e.response.rawPayload
-    $same = ($ab -and $ab -eq $ob)
-    Write-Host "$($p.Name) [$($op.method.ToUpper())] bodies_identical=$same"
-    Write-Host "    owner:    $ob"
-    Write-Host "    attacker: $ab"
-  }
-}
-```
+*Windows:* `./windows-commands.md` → **Scan — Step 12a-0 (body comparison)**.
 
 Classify each **read** finding from the output:
 - `bodies_identical=True`, or the attacker body otherwise carries the victim's

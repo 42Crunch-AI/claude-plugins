@@ -3,8 +3,9 @@
 > **Command conventions used throughout this file**
 > - `<binary>` — the full path resolved during binary discovery (e.g. `~/.42crunch/bin/42c-ast`). Never call `42c-ast` by name alone unless it is confirmed to be on PATH.
 > - **Never write a literal credential value into a command.** Load credentials from the conf file into the environment first, then let the command inherit them — the raw value must never appear in a command string, tool output, or chat message.
-> - **Platform mode**: before every command, load credentials — macOS/Linux: `set -a; . "$HOME/.42crunch/conf/env"; set +a`; Windows: `Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }`. The command then inherits `API_KEY`/`PLATFORM_HOST` — no explicit prefix needed.
-> - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` (macOS/Linux) or `--token $env:TRIAL_TOKEN` (Windows) to every command — never the literal token.
+> - **Platform mode**: before every command, load credentials with `set -a; . "$HOME/.42crunch/conf/env"; set +a`. The command then inherits `API_KEY`/`PLATFORM_HOST` — no explicit prefix needed.
+> - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` to every command — never the literal token.
+> - **Windows**: all command/extraction blocks in this file are macOS/Linux; use the PowerShell equivalents in `./windows-commands.md` (keyed by step), including its credential-loading convention.
 > - **Score tracking**: record `initial_score`, `initial_sec_score`, and `initial_data_score` immediately after the first parse (Step 2). These are used to build the before/after comparison in the final summary.
 
 ---
@@ -22,11 +23,7 @@ OUTPUT_DIR=/tmp/42c-audit
 mkdir -p "$OUTPUT_DIR"
 ```
 
-```powershell
-# Windows
-$OUTPUT_DIR = "$env:TEMP\42c-audit"
-New-Item -ItemType Directory -Force -Path $OUTPUT_DIR | Out-Null
-```
+*Windows:* `./windows-commands.md` → **Audit — Step 1**.
 
 ### Platform mode
 
@@ -147,11 +144,6 @@ Then add one score interpretation line:
 
 Extract only the needed fields — do not read the raw file into context.
 
-> **Platform note**: macOS/Linux use the Python snippets below. Windows users
-> should use the PowerShell equivalents that follow.
-
-**macOS / Linux (Python)**
-
 ```bash
 python3 << 'EOF'
 import json, os, sys
@@ -211,68 +203,7 @@ if os.path.exists("$OUTPUT_DIR/sqg.json"):
 EOF
 ```
 
-**Windows (PowerShell)**
-
-```powershell
-$d = Get-Content "$OUTPUT_DIR\todo.json" | ConvertFrom-Json
-$state = $d.openapiState
-
-# fileInvalid/structureInvalid reports carry no score or security/data
-# sections at all — handle them before touching anything else.
-if ($state -eq "fileInvalid") {
-    $fileErrors = ($d.errors.PSObject.Properties | Where-Object { $_.Value } | ForEach-Object { $_.Name })
-    Write-Host "openapi_state: fileInvalid"
-    Write-Host "file_errors: $(if ($fileErrors) { $fileErrors -join ', ' } else { '(unspecified)' })"
-    exit
-}
-if ($state -eq "structureInvalid") {
-    Write-Host "openapi_state: structureInvalid"
-    Write-Host "structural_issue_count: $($d.issueCounter)"
-    exit
-}
-
-$score     = $d.score
-$secScore  = $d.security.score
-$dataScore = $d.data.score
-Write-Host "score: $score  security: $secScore  data: $dataScore"
-
-# "semanticErrors"/"warnings" use totalIssues, "security"/"data" use
-# issueCounter — that field is the true total; .issues.Count is only what's
-# shown (capped at maxEntriesPerIssue).
-$issues = @()
-foreach ($section in @("semanticErrors", "warnings", "security", "data")) {
-    $sectionData = $d.$section
-    if (-not $sectionData) { continue }
-    $sectionIssues = $sectionData.issues
-    foreach ($issueId in ($sectionIssues | Get-Member -MemberType NoteProperty).Name) {
-        $issueData = $sectionIssues.$issueId
-        $crit      = if ($null -ne $issueData.criticality) { $issueData.criticality } else { 0 }
-        $desc      = $issueData.description
-        $shown     = if ($issueData.issues) { $issueData.issues.Count } else { 0 }
-        $total     = if ($null -ne $issueData.issueCounter) { $issueData.issueCounter } elseif ($null -ne $issueData.totalIssues) { $issueData.totalIssues } else { $shown }
-        $truncated = [bool]$issueData.tooManyError
-        $issues += [PSCustomObject]@{ id=$issueId; section=$section; criticality=$crit; description=$desc; shown=$shown; total=$total; truncated=$truncated }
-    }
-}
-
-if ($issues.Count -gt 0) {
-    Write-Host "`nissues[$($issues.Count)]{id,section,criticality,description,shown,total,truncated}:"
-    foreach ($i in $issues) {
-        Write-Host "  $($i.id),$($i.section),$($i.criticality),$($i.description),$($i.shown),$($i.total),$($i.truncated)"
-    }
-}
-
-# sqg.json (platform mode only — file is absent in token mode)
-if (Test-Path "$OUTPUT_DIR\sqg.json") {
-    $sqg = Get-Content "$OUTPUT_DIR\sqg.json" | ConvertFrom-Json
-    Write-Host "sqg_acceptance: $($sqg.acceptance)"
-    Write-Host "sqg_name: $($sqg.sqgsDetail[0].name)"
-    $blocking = $sqg.processingDetails | ForEach-Object { $_.blockingRules } | Where-Object { $_ }
-    if ($blocking) {
-        Write-Host "blocking_rules: $($blocking -join ', ')"
-    }
-}
-```
+*Windows:* `./windows-commands.md` → **Audit — Step 2**.
 
 Use the extracted output above for all display and fix logic. Never include
 raw `todo.json` or `sqg.json` content in your response.
