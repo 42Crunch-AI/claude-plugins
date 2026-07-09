@@ -9,7 +9,8 @@ each subsequent block. On macOS/Linux, never read this file.
 
 > **The report-extraction sections below are a fallback.** The bundled Python
 > scripts in `../scripts/` (`extract_audit.py`, `extract_scan_happy.py`,
-> `extract_scan_summary.py`, `compare_auth_bodies.py`, `oas_preview.py`) run
+> `extract_scan_summary.py`, `compare_auth_bodies.py`, `oas_preview.py`,
+> `scanconf_bootstrap.py`, `scanconf_lint.py`) run
 > unchanged under **Windows python3** — if `python3`/`py` is on PATH, invoke
 > the script (`py "${CLAUDE_PLUGIN_ROOT}\scripts\<name>.py" <args>`) exactly as
 > the workflow docs describe and skip the PowerShell extraction twin. Use the

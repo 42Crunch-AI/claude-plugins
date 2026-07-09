@@ -29,6 +29,9 @@ script bodies are identical across all three repos.
 | `extract_scan_happy.py [STATUS] [REPORT]` | happy-path run status + report | failing happy-path tests, or `happy_path_failures: none` |
 | `extract_scan_summary.py [STATUS] [REPORT]` | full-scan status + report | sqgPass, blocking rules, request/issue totals, deduplicated failure list |
 | `compare_auth_bodies.py [REPORT]` | full-scan report | owner-vs-attacker body comparison for each defective BOLA/BFLA finding (Step 12a-0 confirmation) |
+| `scanconf_bootstrap.py alias <oas>` | an OpenAPI file | the derived 42Crunch alias (reads only `info.title`) |
+| `scanconf_bootstrap.py set-host <conf> <url>` | a scanconf | writes the `host` variable object in place |
+| `scanconf_lint.py <conf> [--graphql] [--fix-required]` | a scanconf | structural findings (ERROR/WARN), exit 1 on any ERROR; `--fix-required` flips generated `required:true` vars to `false`; `--graphql` adds the Accept-header-narrowing check |
 
 ## Judgment stays with the model
 
@@ -36,14 +39,18 @@ These scripts surface **facts and mechanical transforms only**. Candidacy
 decisions (which id-ref is a real BOLA target), classification (A–D), fix
 generation, and every consent gate remain the model's job — `oas_preview.py`
 deliberately over-surfaces BOLA/BFLA signals (recall over precision) for the
-model to filter and confirm with the user.
+model to filter and confirm with the user. `scanconf_lint.py` checks only
+mechanical structure (inline requests, `defaultResponse`/`responses` mismatch,
+variable shape, `skipped:true`, Accept-header narrowing); scan *design* —
+creator placement, BOLA/BFLA wiring, classification — is not its concern.
 
 ## Dependencies / limitations
 
-- **YAML OpenAPI files**: `oas_preview.py` needs PyYAML for YAML specs. When it
-  is absent the script exits 2 with a clear message and the caller falls back
-  to reading the OAS directly. JSON specs (including every generated scanconf)
-  need nothing beyond the standard library.
+- **YAML OpenAPI files**: `oas_preview.py` and `scanconf_bootstrap.py alias`
+  need PyYAML for YAML specs. When it is absent they exit 2 with a clear message
+  and the caller falls back to reading the OAS directly. JSON specs (including
+  every generated scanconf — so `scanconf_lint.py` and `set-host` never need
+  PyYAML) need nothing beyond the standard library.
 - **Windows without python3**: the reference docs point to
   `references/windows-commands.md` for a PowerShell fallback when python3 is not
   on PATH; otherwise these scripts run identically under Windows python3.

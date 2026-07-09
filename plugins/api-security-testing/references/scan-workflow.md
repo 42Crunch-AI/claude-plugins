@@ -55,9 +55,16 @@ Walk upward from `GIT_ROOT` looking for `.42c/conf.yaml`.
 - Extract the `alias` value for that path.
 
 **If `.42c/conf.yaml` does not exist or the OAS path is not in it:**
-- Derive an alias from `info.title` in the OAS file: lowercase, replace spaces/underscores/special characters with hyphens, collapse consecutive hyphens, strip leading/trailing hyphens.
-  - Example: `info.title: "My Banking API"` → `my-banking-api`, `info.title: "Vulnerable API v2"` → `vulnerable-api-v2`
-  - If `info.title` is absent or empty, fall back to the OAS filename stem using the same transformation rules.
+- Derive the alias with the bundled helper (reads only `info.title`, so a large
+  OAS never enters context; falls back to the filename stem, applies the
+  canonical lowercase/hyphenate transform):
+  ```bash
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scanconf_bootstrap.py" alias <relative-oas-path>
+  ```
+  *Windows without python3:* apply the transform by hand — lowercase, replace
+  spaces/underscores/special characters with hyphens, collapse consecutive
+  hyphens, strip leading/trailing hyphens (e.g. `"My Banking API"` →
+  `my-banking-api`).
 - Add (or create) the entry in `$GIT_ROOT/.42c/conf.yaml`:
   ```yaml
   apis:
@@ -125,8 +132,14 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists **on disk**.
 - On first `scan conf generate`, the generated `environments.default.variables`
   includes one variable per OpenAPI security scheme (for example bearer auth,
   oauth2, apiKey, or basic auth variables) typically with `"required": true`.
-  - Normalize these generated security-related variables to `"required": false`
-    before proceeding, unless the user explicitly wants strict required inputs.
+  Normalize them to `"required": false` (unless the user explicitly wants strict
+  required inputs) with the linter's fix mode:
+  ```bash
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scanconf_lint.py" <CONF_FILE> --fix-required
+  ```
+  It flips every `required: true` variable to `false` in place and prints which
+  it changed. *Windows without python3:* edit each generated security-scheme
+  variable's `"required"` to `false` by hand.
 - The generated `authenticationDetails` is also initialized with one default credential
   per OpenAPI security scheme defined in the OAS (for example bearer, oauth2, basic, or apiKey).
   - Use this generated default credential as the User 1 credential for that
@@ -142,18 +155,25 @@ committed `scanconf.json` stays canonical.
 ### 1c — Write target URL to config
 
 Write `SCAN_TARGET_URL` (confirmed in the skill's URL resolution step) into
-`environments.default.variables.host` in `CONF_FILE`. No URL resolution or
-user prompting is needed here — the URL was already confirmed and reachability
-checked before the workflow started.
+`environments.default.variables.host` with the bundled helper — it writes the
+correct object shape (SCAN42C_HOST source strategy) in place:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scanconf_bootstrap.py" set-host <CONF_FILE> "<SCAN_TARGET_URL>"
+```
+
+No URL resolution or user prompting is needed here — the URL was already
+confirmed and reachability checked before the workflow started.
+*Windows without python3:* write the `host` block by hand using the object
+shape below.
 
 Important schema rule for `environments.default.variables`:
 - Variable entries must be objects with a source strategy, not raw string literals.
-- Keep generated security-scheme variables optional for scan execution — set `"required": false`
-  for each generated security-scheme variable in `environments.default.variables`.
+- Keep generated security-scheme variables optional for scan execution (the
+  `--fix-required` step in 1b already did this).
 - For values used by operation templates (for example `{{username}}`, `{{password}}`),
   add entries under `environments.default.variables` using `"from": "environment"`
-  with both `"name"` and `"required": false`.
-- Use this shape for scan variables:
+  with both `"name"` and `"required": false`. Use this shape:
   ```json
   "host": {
     "name": "SCAN42C_HOST",
@@ -176,7 +196,15 @@ Important schema rule for `environments.default.variables`:
   ```
 
 After writing `SCAN_TARGET_URL` (and any other Step 1 edits — normalization,
-etc.), run the **single Step 1 validation checkpoint**:
+etc.), **lint the config locally first, then** run the single Step 1 network
+validation checkpoint. The lint catches structural mistakes without spending a
+network round-trip:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scanconf_lint.py" <CONF_FILE>
+```
+
+Fix any `ERROR` lines before validating (a `WARN` is advisory). Then:
 
 ```bash
 # Platform mode
@@ -776,6 +804,17 @@ classification, scenario chains, and authorization test wiring), validate
 Step 1c checkpoint passed (rare — no auth schemes, no Class-B/C/D operations,
 no authorization tests), skip this checkpoint and go straight to Step 8 —
 re-validating an unchanged file is a wasted network call.
+
+**Lint locally first** — Steps 2–6 make the heaviest edits (auth wiring,
+scenario chains, authorization tests), so run the structural linter before the
+network validate and fix any `ERROR` (inline requests, `defaultResponse`
+mismatch, `skipped:true`, string variables) it reports:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scanconf_lint.py" <CONF_FILE>
+```
+
+Then run the network validation checkpoint:
 
 ```bash
 # Platform mode
