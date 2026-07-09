@@ -7,6 +7,16 @@ holds the PowerShell equivalent of each, keyed by doc and step. Read it once
 when the first Windows command is needed, then use the matching section for
 each subsequent block. On macOS/Linux, never read this file.
 
+> **The report-extraction sections below are a fallback.** The bundled Python
+> scripts in `../scripts/` (`extract_audit.py`, `extract_scan_happy.py`,
+> `extract_scan_summary.py`, `compare_auth_bodies.py`, `oas_preview.py`) run
+> unchanged under **Windows python3** — if `python3`/`py` is on PATH, invoke
+> the script (`py "${CLAUDE_PLUGIN_ROOT}\scripts\<name>.py" <args>`) exactly as
+> the workflow docs describe and skip the PowerShell extraction twin. Use the
+> inline PowerShell extractors here only when python3 is genuinely unavailable.
+> The setup/run/classifier sections (credential loading, binary check, scan/audit
+> run commands) are always needed on Windows regardless of python3.
+
 ## Windows conventions (apply to every command)
 
 - **Credential loading** (replaces `set -a; . "$HOME/.42crunch/conf/env"; set +a`):

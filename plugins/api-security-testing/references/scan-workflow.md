@@ -839,37 +839,19 @@ SCAN42C_HAPPY_PATH_ONLY=true SCAN42C_REPORT_GENERATE_CURL_COMMAND=false \
 
 *Windows:* `./windows-commands.md` → **Scan — Step 8 (run)**.
 
-Extract only failing happy paths — never include raw output in your response.
+Extract only failing happy paths with the bundled script — never include raw
+output in your response:
 
 ```bash
-# macOS / Linux
-python3 << 'EOF'
-import json
-status = json.load(open("/tmp/42c-happy-status.json"))
-if status.get("statusCode") != 0:
-    print(f"scan_error: statusCode={status.get('statusCode')} {status.get('statusMessage','')}")
-    raise SystemExit(0)
-# Reconstruct the combined shape from the clean status + report files
-data = {**status, "report": json.load(open("/tmp/42c-happy-report.json"))}
-results = data.get("results", data.get("scanResults", []))
-if isinstance(results, dict):
-    results = [results]
-fails = [
-    (r.get("operationId", r.get("path","?")), t.get("testKey","?"), t.get("httpStatus",""), t.get("reason",""))
-    for r in results
-    for t in r.get("testResults", [])
-    if t.get("status") == "fail" and "happy" in t.get("testKey","").lower()
-]
-if fails:
-    print(f"happy_path_failures[{len(fails)}]{{operation,test,status,reason}}:")
-    for op, test, code, reason in fails:
-        print(f"  {op},{test},{code},{reason[:60]}")
-else:
-    print("happy_path_failures: none")
-EOF
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/extract_scan_happy.py" \
+  /tmp/42c-happy-status.json /tmp/42c-happy-report.json
 ```
 
-*Windows:* `./windows-commands.md` → **Scan — Step 8 (extraction)**.
+It prints `scan_error: ...` if the run failed (map it against the Status
+handling table), else a TOON list `happy_path_failures[N]{operation,test,status,reason}`
+or `happy_path_failures: none`.
+
+*Windows without python3:* `./windows-commands.md` → **Scan — Step 8 (extraction)**.
 
 ### Parse results per operation
 
@@ -896,7 +878,7 @@ failing operation before requesting manual input.
 
 ### Iteration
 
-After resolving each batch of failures, re-run using the same command as above (report to `/tmp/42c-happy-report.json` + status to `/tmp/42c-happy-status.json` on macOS/Linux, the `%TEMP%` equivalents on Windows) and re-extract with the same extraction snippet above.
+After resolving each batch of failures, re-run using the same command as above (report to `/tmp/42c-happy-report.json` + status to `/tmp/42c-happy-status.json` on macOS/Linux, the `%TEMP%` equivalents on Windows) and re-run `extract_scan_happy.py`.
 
 For each operation where the root cause cannot be resolved (e.g. the required
 resource cannot be created in this environment), call `AskUserQuestion`:
@@ -973,114 +955,39 @@ SCAN42C_REPORT_GENERATE_CURL_COMMAND=false SCAN42C_REPORT_ISSUES_ONLY=true \
 
 *Windows:* `./windows-commands.md` → **Scan — Step 10 (run)**.
 
-**Immediately after the command completes**, extract the summary as TOON
-(Token-Oriented Object Notation — https://github.com/toon-format/toon) —
-never include raw report content in your response.
-
-> **SQG field location — common mistake to avoid:**
-> The SQG verdict is `sqgPass` (a boolean) at the **root of the status object**
-> (`/tmp/42c-scan-status.json`) — NOT nested inside the report, and not under a
-> `sqg` key. The extraction snippet reconstructs `data = {**status, "report":
-> <report>}`, so `data.get("sqgPass")` and `data.get("sqgDetails")` read from
-> the status object exactly as before. Always use the prescribed extraction snippet
-> below rather than writing a custom parser, to avoid reading the wrong field.
+**Immediately after the command completes**, run the bundled summary extractor
+(output is TOON — Token-Oriented Object Notation, https://github.com/toon-format/toon)
+— never include raw report content in your response:
 
 ```bash
-# macOS / Linux
-python3 << 'EOF'
-import json
-
-status = json.load(open("/tmp/42c-scan-status.json"))
-if status.get("statusCode") != 0:
-  print(f"scan_error: statusCode={status.get('statusCode')} {status.get('statusMessage','')}")
-  raise SystemExit(0)
-
-# Reconstruct the combined shape from the clean status + report files
-data = {**status, "report": json.load(open("/tmp/42c-scan-report.json"))}
-report = data.get("report", {})
-summary = report.get("summary", {})
-
-sqg = "PASSED" if data.get("sqgPass") else ("FAILED" if "sqgPass" in data else "N/A")
-print(f"sqgPass: {sqg}")
-for d in data.get("sqgDetails", []):
-    rules = d.get("blockingRules", [])
-    if rules:
-        print(f"blockingRules[{len(rules)}]: {', '.join(rules)}")
-
-auth_summary = (((summary.get("authorizationTestRequests") or {}).get("executed") or {}).get("total"))
-issue_summary = (((summary.get("issues") or {}).get("total")))
-if auth_summary is not None:
-  print(f"authorizationRequests: {auth_summary}")
-if issue_summary is not None:
-  print(f"issuesTotal: {issue_summary}")
-
-def severity_from_criticality(value):
-  mapping = {
-    5: "critical",
-    4: "high",
-    3: "medium",
-    2: "low",
-    1: "info",
-    0: "info",
-  }
-  return mapping.get(value, "")
-
-failures = []
-operations = report.get("operations") or {}
-if isinstance(operations, dict):
-  for operation_id, operation in operations.items():
-    for section_name in ("authorizationRequestsResults", "conformanceRequestsResults", "customRequestsResults"):
-      for entry in operation.get(section_name, []) or []:
-        outcome = entry.get("outcome") or {}
-        # The engine's verdict is outcome.status: "correct" = the API behaved
-        # correctly (e.g. enforced 401/403 on an authorization swap, or accepted
-        # a partial-security scenario). testSuccessful is NOT a reliable
-        # discriminator — it is false even for correctly-enforced endpoints, so
-        # filtering on it alone reports secured endpoints as failures. Skip any
-        # entry the engine marked "correct".
-        if outcome.get("testSuccessful") is True or outcome.get("status") == "correct":
-          continue
-        test = entry.get("test") or {}
-        severity = severity_from_criticality(outcome.get("criticality"))
-        failures.append((
-          operation_id,
-          test.get("key", "?"),
-          severity,
-        ))
-
-if not failures:
-  legacy_results = data.get("results", data.get("scanResults", []))
-  if isinstance(legacy_results, dict):
-    legacy_results = [legacy_results]
-  for result in legacy_results:
-    for test_result in result.get("testResults", []):
-      if test_result.get("status") == "fail":
-        failures.append((
-          result.get("operationId", result.get("path", "?")),
-          test_result.get("testKey", "?"),
-          test_result.get("severity", ""),
-        ))
-
-if failures:
-  unique_failures = []
-  seen = set()
-  for failure in failures:
-    if failure in seen:
-      continue
-    seen.add(failure)
-    unique_failures.append(failure)
-  print(f"\nfailures[{len(unique_failures)}]{{operation,test,severity}}:")
-  for op, test, sev in unique_failures:
-        print(f"  {op},{test},{sev}")
-else:
-    print("failures: none")
-EOF
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/extract_scan_summary.py" \
+  /tmp/42c-scan-status.json /tmp/42c-scan-report.json
 ```
 
-*Windows:* `./windows-commands.md` → **Scan — Step 10 (extraction)**.
+It prints:
 
-Use only the TOON output above when rendering Step 12. Do not load or display
-the raw scan output file content.
+```
+sqgPass: PASSED|FAILED|N/A
+blockingRules[N]: <rule, ...>              # one line per sqgDetails entry with rules
+authorizationRequests: <n>
+issuesTotal: <n>
+failures[N]{operation,test,severity}:      # deduplicated; "failures: none" when empty
+  <operationId>,<test-key>,<severity>
+```
+
+Two correctness rules the script already encodes (do not re-derive by hand):
+- **Verdict = `outcome.status`.** An entry marked `"correct"` (e.g. the server
+  enforced 401/403 on an authorization swap) is NOT a failure and is skipped.
+  `outcome.testSuccessful` is false even for correctly-enforced endpoints, so
+  it is not a usable discriminator on its own.
+- **`sqgPass` is a boolean at the root of the status object** — not nested in
+  the report, not under an `sqg` key. Always use this script rather than a
+  custom parser, to avoid reading the wrong field.
+
+*Windows without python3:* `./windows-commands.md` → **Scan — Step 10 (extraction)**.
+
+Use only this TOON output when rendering Step 12. Do not load or display the
+raw scan output file content.
 
 ## Step 11 — Database Reset Reminder (After Full Scan)
 
@@ -1143,46 +1050,17 @@ read/write nature **from your Step 5 classification** (not HTTP method alone —
   under the operation's `scenarios`, the attacker's under
   `authorizationRequestsResults`.
 
-Surface the evidence for every authorization finding:
+Surface the evidence for every authorization finding with the bundled script:
 
 ```bash
-# macOS / Linux
-python3 << 'EOF'
-import json, re, base64
-d = {"report": json.load(open("/tmp/42c-scan-report.json"))}
-ops = d.get("report", {}).get("operations", {})
-
-def body(b64):
-    if not b64: return None
-    raw = base64.b64decode(b64).decode("utf-8", "replace")
-    parts = re.split(r'\r?\n\r?\n', raw, maxsplit=1)
-    m = re.search(r'\{.*\}', parts[1] if len(parts) > 1 else raw, re.S)
-    return m.group() if m else None
-
-def owner_body(op):
-    for s in op.get("scenarios", []) or []:
-        for r in (s.get("requests") or [s]):
-            b = body((r.get("response") or {}).get("rawPayload"))
-            if b: return b
-    return None
-
-for opid, op in ops.items():
-    auth = [e for e in op.get("authorizationRequestsResults", []) or []
-            if "swapping" in (e.get("test") or {}).get("key", "")
-            and (e.get("outcome") or {}).get("status") == "defective"]
-    if not auth: continue
-    method = (op.get("method") or "").upper()
-    ob = owner_body(op)
-    for e in auth:
-        ab = body((e.get("response") or {}).get("rawPayload"))
-        same = ab is not None and ab == ob
-        print(f"{opid} [{method}] bodies_identical={same}")
-        print(f"    owner:    {(ob or '(none)')[:120]}")
-        print(f"    attacker: {(ab or '(none)')[:120]}")
-EOF
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/compare_auth_bodies.py" /tmp/42c-scan-report.json
 ```
 
-*Windows:* `./windows-commands.md` → **Scan — Step 12a-0 (body comparison)**.
+For each operation with a defective authentication-swapping result it prints
+`<operation> [<METHOD>] bodies_identical=<bool>` and a 120-char preview of the
+owner and attacker bodies (`authorization_findings: none` when there are none).
+
+*Windows without python3:* `./windows-commands.md` → **Scan — Step 12a-0 (body comparison)**.
 
 Classify each **read** finding from the output:
 - `bodies_identical=True`, or the attacker body otherwise carries the victim's

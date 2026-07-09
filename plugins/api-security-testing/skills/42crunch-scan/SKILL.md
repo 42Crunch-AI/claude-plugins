@@ -44,14 +44,28 @@ running `42crunch-audit` first.
 
 3. **OAS analysis for scan preview** — run silently before asking permission.
 
-   Read the OAS file and collect:
-   - Total operation count
-   - Auth scheme types from `securitySchemes` (Bearer/JWT, API Key, Basic, OAuth2)
-   - BOLA candidate count: operations that reference a specific existing resource by a client-supplied id/key/ref — in a **path** parameter (`{…Id}`, `{…Key}`, `{…Ref}`), a **query** parameter (`?orderId=`), or a **request-body field** (`POST /lookup {orderId}`, `POST /transfer {fromAccountId, toAccountId}`). Method does not gate candidacy; only pure collection or create-new operations are excluded
-   - Whether the OAS contains sample data: any operation with `example`, `examples`, or `default` values on its request body or parameter schemas
+   Run the bundled analyzer instead of reading the whole OAS into context:
 
-   Carry these results forward — `scan-workflow.md` reuses them in its auth
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/oas_preview.py" <oas-file>
+   ```
+
+   It prints a header (title, version, server, auth schemes, and counts of
+   operations / BOLA signals / BFLA signals / operations-with-samples) followed
+   by one row per operation: `method, path, operationId, id_refs (BOLA signals
+   split by path/query/body), bfla_markers (path|tag|name|sec_diff), samples`.
+
+   These are **signals, not verdicts** — the analyzer is deliberately broad
+   (recall over precision). You still judge candidacy: an `id_refs` entry marks
+   a BOLA candidate unless the operation only creates a new resource; a
+   `bfla_markers` entry marks a privileged-operation candidate to confirm with
+   the user. Carry the output forward — `scan-workflow.md` reuses it in its auth
    setup, test-data, and classification steps instead of re-reading the OAS.
+
+   *If the analyzer exits 2 (a YAML OAS and PyYAML is not installed), fall back
+   to reading the OAS directly and collecting the same facts: operation count,
+   `securitySchemes` types, id/key/ref references in path/query/body, privileged
+   markers, and `example`/`examples`/`default` presence.*
 
 4. **Ask for permission to configure the scan.** Output the following scan
    preview as a chat message first:

@@ -6,7 +6,7 @@
 > - **Platform mode**: before every command, load credentials with `set -a; . "$HOME/.42crunch/conf/env"; set +a`. The command then inherits `API_KEY`/`PLATFORM_HOST` — no explicit prefix needed.
 > - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` to every command — never the literal token.
 > - **Windows**: all command/extraction blocks in this file are macOS/Linux; use the PowerShell equivalents in `./windows-commands.md` (keyed by step), including its credential-loading convention.
-> - **Score tracking**: record `initial_score`, `initial_sec_score`, and `initial_data_score` immediately after the first parse (Step 2). These are used to build the before/after comparison in the final summary.
+> - **Score tracking**: `extract_audit.py` saves the first run's scores as a baseline and prints the before/after `score_change:` line on re-run — no manual score bookkeeping needed.
 
 ---
 
@@ -142,138 +142,62 @@ Then add one score interpretation line:
 
 ### Parsing reference
 
-Extract only the needed fields — do not read the raw file into context.
+Run the bundled extractor — it prints a compact summary (scores, per-issue-type
+TOON rows, SQG verdict) without loading the raw JSON into context. It also
+records the scores in `$OUTPUT_DIR/.baseline.json` on the first run, so a
+later re-run after fixes prints a `score_change:` line automatically.
 
 ```bash
-python3 << 'EOF'
-import json, os, sys
-
-with open("$OUTPUT_DIR/todo.json") as f:
-    d = json.load(f)
-
-state = d["openapiState"]
-
-# fileInvalid/structureInvalid reports carry no score or security/data
-# sections at all — handle them before touching anything else.
-if state == "fileInvalid":
-    errors = [k for k, v in d["errors"].items() if v]
-    print(f"openapi_state: fileInvalid")
-    print(f"file_errors: {', '.join(errors) if errors else '(unspecified)'}")
-    sys.exit(0)
-if state == "structureInvalid":
-    print(f"openapi_state: structureInvalid")
-    print(f"structural_issue_count: {d['issueCounter']}")
-    sys.exit(0)
-
-score      = d["score"]
-sec_score  = d["security"]["score"]
-data_score = d["data"]["score"]
-print(f"score: {score}  security: {sec_score}  data: {data_score}")
-
-# Collect issues as TOON. "semanticErrors"/"warnings" use totalIssues,
-# "security"/"data" use issueCounter — that field is the true total;
-# len(issues) is only what's shown (capped at maxEntriesPerIssue).
-issues = []
-for section in ["semanticErrors", "warnings", "security", "data"]:
-    section_data = d.get(section)
-    if not section_data:
-        continue
-    for issue_id, issue_data in section_data["issues"].items():
-        crit      = issue_data.get("criticality", 0)
-        desc      = issue_data["description"]
-        shown     = len(issue_data.get("issues", []))
-        total     = issue_data.get("issueCounter", issue_data.get("totalIssues", shown))
-        truncated = issue_data.get("tooManyError", False)
-        issues.append((issue_id, section, crit, desc, shown, total, truncated))
-
-if issues:
-    print(f"\nissues[{len(issues)}]{{id,section,criticality,description,shown,total,truncated}}:")
-    for issue_id, section, crit, desc, shown, total, truncated in issues:
-        print(f"  {issue_id},{section},{crit},{desc},{shown},{total},{truncated}")
-
-# sqg.json (platform mode only — file is absent in token mode)
-if os.path.exists("$OUTPUT_DIR/sqg.json"):
-    with open("$OUTPUT_DIR/sqg.json") as f:
-        sqg = json.load(f)
-    print(f"sqg_acceptance: {sqg['acceptance']}")
-    print(f"sqg_name: {sqg['sqgsDetail'][0]['name']}")
-    blocking = [r for pd in sqg.get("processingDetails", []) for r in pd.get("blockingRules", [])]
-    if blocking:
-        print(f"blocking_rules: {', '.join(blocking)}")
-EOF
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/extract_audit.py" "$OUTPUT_DIR"
 ```
 
-*Windows:* `./windows-commands.md` → **Audit — Step 2**.
+*Windows without python3:* `./windows-commands.md` → **Audit — Step 2**.
 
-Use the extracted output above for all display and fix logic. Never include
-raw `todo.json` or `sqg.json` content in your response.
+Output shape (all display and fix logic reads from this — never load raw
+`todo.json`/`sqg.json` into your response):
 
-```python
-# Reference: field paths used in display and fix logic
-# todo.json
-index = d["index"]                      # list of OAS paths (resolve pointer ints against this)
-score = d["score"]
-sec_score  = d["security"]["score"]
-data_score = d["data"]["score"]
-
-# Save initial scores for before/after comparison (used in final summary)
-initial_score      = score
-initial_sec_score  = sec_score
-initial_data_score = data_score
-
-# Determine which issue IDs are SQG-blocking (semanticErrors/warnings are
-# never SQG-blocking — they carry no per-type criticality and sit outside
-# the security/data score)
-blocking_ids = set()
-if sqg:
-    # Platform mode: use sqg.json
-    if sqg["acceptance"] != "yes":
-        blocking_ids = set(sqg["sqgsDetail"][0]["directives"].get("issueRules", []))
-else:
-    # Token mode: use user-defined blocking_severity_threshold from the
-    # session threshold prompt (CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1)
-    for section in ["security", "data"]:
-        for issue_id, issue_data in d[section]["issues"].items():
-            if issue_data["criticality"] >= blocking_severity_threshold:
-                blocking_ids.add(issue_id)
-
-# Iterate issues across both scored sections
-for section in ["security", "data"]:
-    for issue_id, issue_data in d[section]["issues"].items():
-        title       = issue_data["description"]           # always populated — use as the title
-        pointers    = [index[loc["pointer"]] for loc in issue_data["issues"]]
-        # specificDescription is frequently absent or "" — never rely on it alone
-        details     = [loc.get("specificDescription") or title for loc in issue_data["issues"]]
-        crit        = issue_data["criticality"]   # 4=CRITICAL 3=HIGH 2=MEDIUM 1=LOW 0=INFO
-        is_blocking = issue_id in blocking_ids
-        total       = issue_data["issueCounter"]           # true total, not len(pointers)
-        truncated   = issue_data["tooManyError"]           # True => total > len(pointers) shown
-
-# Iterate spec-conformance issues (never SQG-blocking, no per-type criticality)
-for section in ["semanticErrors", "warnings"]:
-    section_data = d.get(section)
-    if not section_data:
-        continue
-    for issue_id, issue_data in section_data["issues"].items():
-        title     = issue_data["description"]
-        total     = issue_data["totalIssues"]
-        truncated = issue_data["tooManyError"]
-
-# sqg.json
-sqg_passed     = sqg["acceptance"] == "yes"
-sqg_name       = sqg["sqgsDetail"][0]["name"]
-blocking_rules = [r for d in sqg.get("processingDetails", [])
-                  for r in d.get("blockingRules", [])]
 ```
+score: <n>  security: <n>  data: <n>       # security/data omitted for GraphQL (single score)
+openapi_state: fileInvalid|structureInvalid # printed INSTEAD of scores for an invalid spec
+issues[N]{id,section,criticality,description,shown,total,truncated}:
+  <issue-id>,<security|data|semanticErrors|warnings>,<crit>,<desc>,<shown>,<total>,<bool>
+sqg_acceptance: yes|no                       # platform mode only
+sqg_name: <name>
+blocking_rules: <human-readable blocking reasons>
+sqg_blocking_issue_ids: <id, id, ...>        # the issue IDs the SQG blocks on (platform, acceptance≠yes)
+```
+
+Field semantics for rendering and fix logic:
+- `criticality`: 4=CRITICAL 3=HIGH 2=MEDIUM 1=LOW 0=INFO.
+- `total` is the true occurrence count; `shown` is what the report lists
+  (capped at `maxEntriesPerIssue`). `truncated=True` means `total > shown` —
+  say so in the heading (`(showing <shown> of <total> locations)`) and expect
+  more than one fix-and-re-audit cycle to clear that rule.
+- **SQG-blocking issue IDs**: platform mode → the `sqg_blocking_issue_ids`
+  line. Token mode → no SQG; treat an issue as blocking when its `criticality`
+  ≥ the session `blocking_severity_threshold` from the score-headline prompt.
+- `semanticErrors`/`warnings` are never SQG-blocking (no per-type criticality,
+  outside the score).
+
+**Resolve issue locations to OAS paths** only when you need them (the consent
+gate and the Step 4 fix loop), by issue ID — this keeps location noise out of
+context until it is actionable:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/extract_audit.py" "$OUTPUT_DIR" --locations <id>[,<id>...]
+```
+
+It prints each occurrence as a human-readable OAS path plus its
+`specificDescription` (falling back to the issue description when that field is
+empty, as it frequently is).
 
 ### Rendered format
 
-Group issues into four tiers. Resolve each `pointer` integer to its human-readable
-OAS path using `index[pointer]`. Severity label: 4=CRITICAL, 3=HIGH, 2=MEDIUM, 1=LOW, 0=INFO.
-Use each issue type's `description` as the title; append a location's
-`specificDescription` only when it is present and non-empty. When `truncated`
-is true for an issue type, append `(showing <shown> of <total> locations)` to
-its heading — never imply the listed locations are the complete set.
+Group issues into four tiers. Use each issue type's `description` as the title;
+append a location's `specificDescription` (from `--locations`) only when it is
+present and non-empty. When `truncated` is true, append `(showing <shown> of
+<total> locations)` to its heading — never imply the listed locations are the
+complete set.
 
 ```
 ── 🔴 SQG-Blocking Issues — must fix before scan can run ──────────────────
@@ -347,55 +271,35 @@ truth. Instead, present the choice explicitly before applying the fix:
 
 For each SQG-blocking issue the user has approved:
 
-1. Map the issue `pointer` integer to its human-readable OAS path using
-   `index[pointer]` from `todo.json`.
-2. Read the structural context in the OAS file at that path: the operation,
+1. Locate the issue's occurrences with
+   `extract_audit.py "$OUTPUT_DIR" --locations <id>` (Step 2) to get the
+   human-readable OAS paths.
+2. Read the structural context in the OAS file at each path: the operation,
    request/response schema, security requirements, or parameter definition.
 3. Apply the minimum correct fix required to resolve the blocking rule. Do not
    make speculative or cosmetic changes — only fix what is explicitly blocking
    SQG acceptance.
 
 If an issue was `truncated` (more locations exist than were shown), fixing the
-listed pointers does not clear the rule — the remaining, unseen occurrences
+listed locations does not clear the rule — the remaining, unseen occurrences
 still block SQG. Treat this as expected and plan to repeat fix-and-re-audit
-until `issueCounter` for that rule reaches `0`, rather than treating the first
-pass as failed.
+until `total` for that rule reaches `0`, rather than treating the first pass as
+failed.
 
-After all fixes are applied, re-run the audit (**Step 1**) to confirm the SQG
-now passes:
-- **Platform mode**: confirm `sqg["acceptance"]` is `"yes"` in the new `sqg.json`.
+After all fixes are applied, re-run the audit (**Step 1**) and re-run
+`extract_audit.py` to confirm the SQG now passes:
+- **Platform mode**: confirm `sqg_acceptance: yes`.
 - **Token mode**: confirm the new score meets `target_score` and no issues
-  with criticality ≥ `blocking_severity_threshold` remain in `todo.json`.
+  with criticality ≥ `blocking_severity_threshold` remain.
 - If a previously blocking issue still has occurrences after a fix cycle
-  (`issueCounter > 0` for that rule ID), repeat Steps 3–4 for the remaining
-  locations before declaring it resolved.
+  (`total > 0` for that rule ID), repeat Steps 3–4 for the remaining locations
+  before declaring it resolved.
 
-After confirming the SQG passes, compute the before/after score deltas and
-pass them to the final summary:
-
-```python
-delta_score      = round(final_score      - initial_score,      1)
-delta_sec_score  = round(final_sec_score  - initial_sec_score,  1)
-delta_data_score = round(final_data_score - initial_data_score, 1)
-
-def fmt_delta(d):
-    return f"+{d}" if d > 0 else (f"-{abs(d)}" if d < 0 else "±0")
-```
-
-Format the `Score change:` line as:
-
-```
-Score change:   <initial_score> → <final_score>  (<fmt_delta(delta_score)>)  |  Data: <initial_data_score> → <final_data_score>  (<fmt_delta(delta_data_score)>)
-```
-
-Include a Security segment only when `delta_sec_score != 0`:
-
-```
-  |  Security: <initial_sec_score> → <final_sec_score>  (<fmt_delta(delta_sec_score)>)
-```
-
-Omit the `Score change:` line entirely when no fixes were applied (user
-declined at the consent gate, or there were no SQG-blocking issues).
+The re-run's `extract_audit.py` output includes a `score_change:` line
+(computed against the baseline saved on the first run) — use it verbatim for
+the final summary's before/after comparison. Omit the score-change line only
+when no fixes were applied (user declined at the consent gate, or there were no
+SQG-blocking issues).
 
 ---
 
