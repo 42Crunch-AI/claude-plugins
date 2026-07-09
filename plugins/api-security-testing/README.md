@@ -14,7 +14,7 @@ The `42crunch-api-security-testing` plugin is designed for AI-assisted developme
 | [`/42crunch-audit`](./README.md#42crunch-audit) | Static security audit of an OpenAPI Specification file with scored findings and AI-assisted fixes |
 | [`/42crunch-scan`](./README.md#42crunch-scan) | Live conformance and authorization scan (BOLA/BFLA) against a running API |
 | [`/42crunch-api-security-testing`](./README.md#42crunch-api-security-testing) | Full audit + scan pipeline in a single session |
-| [`/generate-oas`](./README.md#generate-oas) | Generate a complete `openapi.json` from your API source code, a Postman collection, or both |
+| [`/generate-oas`](./README.md#generate-oas) | Generate a complete `openapi.json` from your API source code, a Postman/Insomnia collection, or both |
 
 ## Prerequisites
 
@@ -56,7 +56,7 @@ See [RECIPES.md](./RECIPES.md) for step-by-step guides covering the most common 
 - **Review-only mode** — see findings without applying any fixes
 - **Full pipeline** (audit + scan) in a single session
 - **Scan only** when the audit is already passing
-- **Generating an OAS** from source code and/or a Postman collection, then auditing it immediately
+- **Generating an OAS** from source code and/or a Postman/Insomnia collection, then auditing it immediately
 
 ## Skills
 
@@ -157,7 +157,7 @@ Deduplicates schemas into `components/schemas` and performs a self-review pass b
 
 Supported frameworks: Express, Fastify, Koa, Hapi, NestJS, FastAPI, Flask, Django, Starlette, Spring Boot, Quarkus, Micronaut, Gin, Echo, Chi, Gorilla/mux, Rails, Sinatra, Grape, ASP.NET Core, and more.
 
-> **Trigger:** "generate OAS", "create OpenAPI spec", "document my API", "reverse-engineer spec", "write openapi.json from my codebase", "convert postman to openapi", "convert insomnia to openapi", "postman collection to OAS", "insomnia collection to OAS", "generate spec from postman"
+> **Trigger:** "generate OAS", "create OpenAPI spec", "document my API", "reverse-engineer spec", "write openapi.json from my codebase", "convert postman to openapi", "convert insomnia to openapi", "postman collection to OAS", "insomnia collection to OAS", "generate spec from postman", "generate spec from insomnia"
 
 **Usage:**
 ```

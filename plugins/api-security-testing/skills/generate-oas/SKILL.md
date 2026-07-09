@@ -42,8 +42,11 @@ Ask about sources **one at a time**, codebase first, in this order.
 - question: "Do you have the API codebase available to generate the spec from?"
 - options: `["Yes — I'll point you to it", "No"]`
 
-If yes, ask for the root directory. Default to the current working directory,
-or a specific service subdirectory if one is open in the editor.
+If yes, **call `AskUserQuestion`** to ask for the root directory:
+- question: "What is the root directory of the API codebase?"
+- options: `["Current working directory", "A specific subdirectory (type custom path in other)"]`
+
+The user can always type a custom path via the "Other" option.
 
 ### 2. API client collection
 
@@ -51,18 +54,20 @@ or a specific service subdirectory if one is open in the editor.
 - question: "Do you have a Postman or Insomnia collection for this API?"
 - options: `["Postman", "Insomnia", "No"]`
 
-If **Postman**, ask for:
-1. Postman collection file path (JSON, v2.0 or v2.1 — required)
-2. Postman environment file path (optional — skip if none)
+If **Postman**, **call `AskUserQuestion` twice, as two separate calls**:
+1. First call — ask for the Postman collection file path (JSON, v2.0 or
+   v2.1 — required).
+2. Second call — ask for the Postman environment file path (optional —
+   skip if none).
 
-If **Insomnia**, ask for:
-1. Insomnia export file path (required) — JSON for v4, JSON or YAML for v5.
-   Detect the version automatically once read (see
-   [Insomnia Collection](#insomnia-collection) below); don't ask the user to
-   specify it.
-2. A separate Insomnia environment export file path (optional — skip if the
-   main export already contains the environment(s), which is the common case
-   for a full workspace export)
+If **Insomnia**, **call `AskUserQuestion` twice, as two separate calls**:
+1. First call — ask for the Insomnia export file path (required) — JSON
+   for v4, JSON or YAML for v5. Detect the version automatically once read
+   (see [Insomnia Collection](#insomnia-collection) below); don't ask the
+   user to specify it.
+2. Second call — ask for a separate Insomnia environment export file path
+   (optional — skip if the main export already contains the environment(s),
+   which is the common case for a full workspace export).
 
 ### 3. Resolve the mode
 
@@ -81,7 +86,7 @@ If **Insomnia**, ask for:
 
 ### 4. Output path
 
-Ask for the output file path, defaulting to:
+**Call `AskUserQuestion`** to confirm the output file path, defaulting to:
 - `openapi.json` at the codebase root (if a codebase was provided), else
 - `openapi.json` next to the collection file
 
