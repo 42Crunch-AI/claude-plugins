@@ -7,6 +7,25 @@
 > - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` (macOS/Linux) or `--token $env:TRIAL_TOKEN` (Windows) to every command — never the literal token.
 > - **OAS analysis is done once, in the calling skill.** The skill's scan-preview step already extracted the operation count, auth scheme types, BOLA/BFLA candidates, and sample-data presence. Reuse those results throughout Steps 2–5 — do not re-read the OAS to re-derive facts already established this conversation. Open the OAS only to look up detail not yet extracted (e.g. a specific operation's schema or examples).
 > - **PowerShell string quoting**: when a variable is immediately followed by `:` inside a double-quoted string, PowerShell parses `$varName:` as a PSDrive reference (like `$env:TEMP`) and throws `InvalidVariableReferenceWithDrive`. Always use `${varName}` to delimit the name — e.g. `"${opName}: ..."` not `"$opName: ..."`. This applies to any inline PowerShell generated during the session, not just the static snippets below.
+> - **Runtime overrides via `SCAN42C_*` env vars (do not edit the scan config for these).** `scan run` reads its whole `runtimeConfiguration` from the environment, so behaviour that varies per run is set with an env var prefixed on the command — never by mutating the committed `scanconf.json`. This workflow uses three (each scoped to the single command; a fresh shell per invocation means they never leak to the next run): `SCAN42C_HAPPY_PATH_ONLY=true` (happy-path validation run only — replaces toggling `happyPathOnly` in the config), `SCAN42C_REPORT_GENERATE_CURL_COMMAND=false` (every run — drops the per-request curl strings the workflow never reads), and `SCAN42C_REPORT_ISSUES_ONLY=true` (full scan only — ~23% smaller report; keeps happy-path scenarios and their `response.rawPayload`, keeps failing/defective conformance and authorization results, drops only the passing test details the extraction already discards). macOS/Linux: prefix `VAR=value` before `<binary>`. Windows: set `$env:VAR='value'` on the line before the `& <binary>` call.
+
+---
+
+## Status handling (all `42c-ast` commands)
+
+Every command prints a status object (`{statusCode, statusMessage, ...}`) — in
+the status file for `scan run` (`--output` runs), or on stdout for others. Map
+it before touching any report; do not assume a non-zero code means an invalid
+spec/config:
+
+| statusCode / statusMessage | Meaning | Action |
+|---|---|---|
+| `0` / `success` | OK | Proceed. |
+| `3` / `limits_reached` | Token plan quota hit (Token mode) | Follow `./token-limit.md`. Do not retry. |
+| `unauthorized` / `forbidden` | Credentials invalid, expired, or lacking access to this API/tag | Tell the user their key/token was rejected; suggest re-running `42crunch-setup`. Do not retry with the same credentials. |
+| `timeout` | Platform or scan target unreachable/slow | Surface as a connectivity issue (check the target URL / network), not a spec error. |
+| `2` / `unknown_error` | Malformed input **or an unsupported/misspelled flag** (the binary reports both this way) | Re-check the exact command flags first; if the flags are correct, treat as a malformed spec/config and surface `statusMessage`. |
+| `invalid_contract` / `invalid_input` / other non-zero | The OAS/scanconf is malformed | Surface `statusMessage` and stop; fix the definition. |
 
 ---
 
@@ -114,15 +133,11 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists **on disk**.
     scheme. Update/wire that default entry as needed; do not create an additional
     User 1 credential unless the user explicitly asks for multiple primary
     identities.
-- Set `runtimeConfiguration.reportGenerateCurlCommand` to `false`. The binary
-  generates it as `true`, which embeds a full curl string in every test
-  request — roughly 9% of the report's bytes — that this workflow never reads
-  (body-aware authorization confirmation in Step 12a-0 uses `response.rawPayload`,
-  not the curl field). Turning it off shrinks the report file and speeds parsing
-  at no cost to any step.
-  ```json
-  "reportGenerateCurlCommand": false
-  ```
+
+Do **not** edit `runtimeConfiguration` in the generated config for report
+trimming or happy-path gating — those are applied per run via `SCAN42C_*` env
+vars (see the Runtime overrides convention in the header, and Steps 8/10). The
+committed `scanconf.json` stays canonical.
 
 ### 1c — Write target URL to config
 
@@ -790,11 +805,10 @@ Before running the full scan, validate all happy paths in strict mode.
 
 ### Configure and run
 
-Set `happyPathOnly: true` in `runtimeConfiguration`:
-
-```json
-"happyPathOnly": true
-```
+Gate this run to happy paths with the `SCAN42C_HAPPY_PATH_ONLY=true` env var
+(prefixed on the command below) — do **not** edit `happyPathOnly` in the
+config. The generated config keeps its default (`false`); the full scan in
+Step 10 runs without the env var and so fuzzes normally.
 
 Leave `laxTestingModeEnabled` at its generated default (`false`). Never set it
 to `true` before happy paths are confirmed — in lax mode, fuzzing runs even on
@@ -811,12 +825,14 @@ the old single-stream capture that required regex-extracting JSON from a
 ```bash
 # macOS / Linux — Platform mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
+SCAN42C_HAPPY_PATH_ONLY=true SCAN42C_REPORT_GENERATE_CURL_COMMAND=false \
 <binary> scan run --enrich=false \
   --output /tmp/42c-happy-report.json --output-format json \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-happy-status.json
 
 # macOS / Linux — Token mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
+SCAN42C_HAPPY_PATH_ONLY=true SCAN42C_REPORT_GENERATE_CURL_COMMAND=false \
 <binary> scan run --enrich=false \
   --freemium-host stateless.42crunch.com:443 --token "$TRIAL_TOKEN" \
   --output /tmp/42c-happy-report.json --output-format json \
@@ -826,12 +842,14 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 ```powershell
 # Windows — Platform mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
+$env:SCAN42C_HAPPY_PATH_ONLY='true'; $env:SCAN42C_REPORT_GENERATE_CURL_COMMAND='false'
 & <binary> scan run --enrich=false `
   --output "$env:TEMP\42c-happy-report.json" --output-format json `
   <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-happy-status.json"
 
 # Windows — Token mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
+$env:SCAN42C_HAPPY_PATH_ONLY='true'; $env:SCAN42C_REPORT_GENERATE_CURL_COMMAND='false'
 & <binary> scan run --enrich=false `
   --freemium-host stateless.42crunch.com:443 --token $env:TRIAL_TOKEN `
   --output "$env:TEMP\42c-happy-report.json" --output-format json `
@@ -953,13 +971,12 @@ warning before continuing:
 > ⚠️ Proceeding without a database reset — scan results may be affected by
 > residual state from happy path runs.
 
-### Restore runtime flags
+### Ready for the full scan
 
-Once all happy paths pass, set `happyPathOnly: false` before the full scan:
-
-```json
-"happyPathOnly": false
-```
+Once all happy paths pass, proceed to Step 9. No config change is needed —
+happy-path gating was applied via the `SCAN42C_HAPPY_PATH_ONLY` env var on the
+Step 8 command only, and the full scan simply omits it. The committed
+`scanconf.json` was never mutated.
 
 ---
 
@@ -987,12 +1004,14 @@ findings.
 ```bash
 # macOS / Linux — Platform mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
+SCAN42C_REPORT_GENERATE_CURL_COMMAND=false SCAN42C_REPORT_ISSUES_ONLY=true \
 <binary> scan run --enrich=false --report-sqg \
   --output /tmp/42c-scan-report.json --output-format json \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-status.json
 
 # macOS / Linux — Token mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
+SCAN42C_REPORT_GENERATE_CURL_COMMAND=false SCAN42C_REPORT_ISSUES_ONLY=true \
 <binary> scan run --enrich=false \
   --freemium-host stateless.42crunch.com:443 --token "$TRIAL_TOKEN" \
   --output /tmp/42c-scan-report.json --output-format json \
@@ -1002,12 +1021,14 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 ```powershell
 # Windows — Platform mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
+$env:SCAN42C_REPORT_GENERATE_CURL_COMMAND='false'; $env:SCAN42C_REPORT_ISSUES_ONLY='true'
 & <binary> scan run --enrich=false --report-sqg `
   --output "$env:TEMP\42c-scan-report.json" --output-format json `
   <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-scan-status.json"
 
 # Windows — Token mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
+$env:SCAN42C_REPORT_GENERATE_CURL_COMMAND='false'; $env:SCAN42C_REPORT_ISSUES_ONLY='true'
 & <binary> scan run --enrich=false `
   --freemium-host stateless.42crunch.com:443 --token $env:TRIAL_TOKEN `
   --output "$env:TEMP\42c-scan-report.json" --output-format json `

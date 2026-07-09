@@ -68,10 +68,19 @@ The command above also prints a top-level status object to stdout (already
 visible — no extra capture needed): `{astVersion, logs, statusCode,
 statusMessage}`. Check it before touching any output file:
 
-- **`statusCode: 0`** → continue to Step 2.
-- **`statusCode: 3` and `statusMessage: limits_reached`** (Token mode
+- **`statusCode: 0` / `success`** → continue to Step 2.
+- **`statusCode: 3` / `limits_reached`** (Token mode
   only) → the token plan has hit its usage limit. Follow `./token-limit.md` now.
   Do not proceed to Step 2 — `todo.json`/`report.json` were not written.
+- **`statusMessage: unauthorized` / `forbidden`** → the API key or token was
+  rejected (invalid, expired, or lacking access to this API/tag). Tell the user
+  and suggest re-running `42crunch-setup`; do not retry with the same credentials.
+- **`statusMessage: timeout`** → the platform was unreachable/slow — surface as
+  a connectivity issue, not a spec error.
+- **`statusCode: 2` / `unknown_error`** → malformed input **or an
+  unsupported/misspelled flag** (the binary reports both this way). Re-check the
+  command's flags first; if they are correct, treat as a malformed OAS and
+  surface `statusMessage`.
 - **Any other non-zero `statusCode`** → surface `statusMessage` to the user
   as an error and stop. Do not attempt to parse `todo.json`/`report.json`.
 
