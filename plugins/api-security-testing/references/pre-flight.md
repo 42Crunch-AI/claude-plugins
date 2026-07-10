@@ -122,7 +122,7 @@ fi
   - **question**: `"I see multiple OpenAPI files open. Which one should I use?"` — list each filename as an option.
 - If **no** OAS file can be resolved → call `AskUserQuestion`:
   - **question**: `"I couldn't find an OpenAPI file. Would you like me to generate one from your source code first?"` — options: `["Yes — generate from source code", "No — I'll provide a path"]`
-  - If **Yes** → invoke the `code-to-oas` skill, then resume with the generated file.
+  - If **Yes** → invoke the `generate-oas` skill, then resume with the generated file.
   - If **No** → ask the user to provide the file path and wait.
 
 ---
