@@ -867,6 +867,10 @@ Coverage notes:
   it were observed.
 - **Do not modify** any source code, Postman/Insomnia collection, or
   environment file. This skill is read-only with respect to its inputs.
+- **Do not create persistent helper scripts in the workspace** (for example,
+  ad-hoc parser/validator files). Prefer one-shot shell commands or OS temp
+  locations outside the repo. If a temporary file is unavoidable, delete it
+  in the same run and call out the cleanup in the report.
 - **Prefer `$ref`** over inline schemas for any object used more than once.
 - **Use OAS 3.0.x** (e.g. `"3.0.3"`), not 2.0 (Swagger) or 3.1, unless the
   user explicitly requests otherwise.
