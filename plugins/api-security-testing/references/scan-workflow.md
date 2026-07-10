@@ -4,7 +4,7 @@
 > - `<binary>` — the full path resolved during binary discovery (e.g. `~/.42crunch/bin/42c-ast`). Never call `42c-ast` by name alone unless it is confirmed to be on PATH.
 > - **Never write a literal credential value into a command.** Load credentials from the conf file into the environment first, then let the command inherit them — the raw value must never appear in a command string, tool output, or chat message.
 > - **Platform mode**: before every command, load credentials with `set -a; . "$HOME/.42crunch/conf/env"; set +a`. The command then inherits `API_KEY`/`PLATFORM_HOST` — no explicit prefix needed.
-> - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` to every command — never the literal token.
+> - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--token "$TRIAL_TOKEN"` to every command — never the literal token.
 > - **Windows**: all command/extraction blocks in this file are macOS/Linux; use the PowerShell equivalents in `./windows-commands.md` (keyed by step), including its credential-loading and string-quoting conventions.
 > - **OAS analysis is done once, in the calling skill.** The skill's scan-preview step already extracted the operation count, auth scheme types, BOLA/BFLA candidates, and sample-data presence. Reuse those results throughout Steps 2–5 — do not re-read the OAS to re-derive facts already established this conversation. Open the OAS only to look up detail not yet extracted (e.g. a specific operation's schema or examples).
 > - **Runtime overrides via `SCAN42C_*` env vars (do not edit the scan config for these).** `scan run` reads its whole `runtimeConfiguration` from the environment, so behaviour that varies per run is set with an env var prefixed on the command — never by mutating the committed `scanconf.json`. This workflow uses three (each scoped to the single command; a fresh shell per invocation means they never leak to the next run): `SCAN42C_HAPPY_PATH_ONLY=true` (happy-path validation run only — replaces toggling `happyPathOnly` in the config), `SCAN42C_REPORT_GENERATE_CURL_COMMAND=false` (every run — drops the per-request curl strings the workflow never reads), and `SCAN42C_REPORT_ISSUES_ONLY=true` (full scan only — ~23% smaller report; keeps happy-path scenarios and their `response.rawPayload`, keeps failing/defective conformance and authorization results, drops only the passing test details the extraction already discards). Prefix `VAR=value` before `<binary>` (Windows form: `./windows-commands.md`).
@@ -111,7 +111,6 @@ Check whether `.42c/scan/<alias>/scanconf.json` exists **on disk**.
   # Token mode
   set -a; . "$HOME/.42crunch/conf/env"; set +a
   <binary> scan conf generate \
-    --freemium-host stateless.42crunch.com:443 \
     --token "$TRIAL_TOKEN" \
     --output-format json \
     --output .42c/scan/<alias>/scanconf.json \
@@ -215,7 +214,6 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 # Token mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan conf validate <relative-oas-path> \
-  --freemium-host stateless.42crunch.com:443 \
   --token "$TRIAL_TOKEN" \
   --conf-file <CONF_FILE>
 ```
@@ -825,7 +823,6 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 # Token mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> scan conf validate <relative-oas-path> \
-  --freemium-host stateless.42crunch.com:443 \
   --token "$TRIAL_TOKEN" \
   --conf-file <CONF_FILE>
 ```
@@ -871,7 +868,7 @@ SCAN42C_HAPPY_PATH_ONLY=true SCAN42C_REPORT_GENERATE_CURL_COMMAND=false \
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 SCAN42C_HAPPY_PATH_ONLY=true SCAN42C_REPORT_GENERATE_CURL_COMMAND=false \
 <binary> scan run --enrich=false \
-  --freemium-host stateless.42crunch.com:443 --token "$TRIAL_TOKEN" \
+  --token "$TRIAL_TOKEN" \
   --output /tmp/42c-happy-report.json --output-format json \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-happy-status.json
 ```
@@ -987,7 +984,7 @@ SCAN42C_REPORT_GENERATE_CURL_COMMAND=false SCAN42C_REPORT_ISSUES_ONLY=true \
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 SCAN42C_REPORT_GENERATE_CURL_COMMAND=false SCAN42C_REPORT_ISSUES_ONLY=true \
 <binary> scan run --enrich=false \
-  --freemium-host stateless.42crunch.com:443 --token "$TRIAL_TOKEN" \
+  --token "$TRIAL_TOKEN" \
   --output /tmp/42c-scan-report.json --output-format json \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-status.json
 ```

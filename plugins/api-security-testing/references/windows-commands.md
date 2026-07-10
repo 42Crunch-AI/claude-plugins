@@ -178,7 +178,7 @@ $env:SCAN42C_HAPPY_PATH_ONLY='true'; $env:SCAN42C_REPORT_GENERATE_CURL_COMMAND='
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
 $env:SCAN42C_HAPPY_PATH_ONLY='true'; $env:SCAN42C_REPORT_GENERATE_CURL_COMMAND='false'
 & <binary> scan run --enrich=false `
-  --freemium-host stateless.42crunch.com:443 --token $env:TRIAL_TOKEN `
+  --token $env:TRIAL_TOKEN `
   --output "$env:TEMP\42c-happy-report.json" --output-format json `
   <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-happy-status.json"
 ```
@@ -229,7 +229,7 @@ $env:SCAN42C_REPORT_GENERATE_CURL_COMMAND='false'; $env:SCAN42C_REPORT_ISSUES_ON
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
 $env:SCAN42C_REPORT_GENERATE_CURL_COMMAND='false'; $env:SCAN42C_REPORT_ISSUES_ONLY='true'
 & <binary> scan run --enrich=false `
-  --freemium-host stateless.42crunch.com:443 --token $env:TRIAL_TOKEN `
+  --token $env:TRIAL_TOKEN `
   --output "$env:TEMP\42c-scan-report.json" --output-format json `
   <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-scan-status.json"
 ```

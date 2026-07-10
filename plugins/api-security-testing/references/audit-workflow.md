@@ -4,7 +4,7 @@
 > - `<binary>` — the full path resolved during binary discovery (e.g. `~/.42crunch/bin/42c-ast`). Never call `42c-ast` by name alone unless it is confirmed to be on PATH.
 > - **Never write a literal credential value into a command.** Load credentials from the conf file into the environment first, then let the command inherit them — the raw value must never appear in a command string, tool output, or chat message.
 > - **Platform mode**: before every command, load credentials with `set -a; . "$HOME/.42crunch/conf/env"; set +a`. The command then inherits `API_KEY`/`PLATFORM_HOST` — no explicit prefix needed.
-> - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--freemium-host stateless.42crunch.com:443` and `--token "$TRIAL_TOKEN"` to every command — never the literal token.
+> - **Token mode**: load `TRIAL_TOKEN` the same way, then add `--token "$TRIAL_TOKEN"` to every command — never the literal token.
 > - **Windows**: all command/extraction blocks in this file are macOS/Linux; use the PowerShell equivalents in `./windows-commands.md` (keyed by step), including its credential-loading convention.
 > - **Score tracking**: `extract_audit.py` saves the first run's scores as a baseline and prints the before/after `score_change:` line on re-run — no manual score bookkeeping needed.
 
@@ -44,7 +44,6 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> audit run \
   --enrich=false \
-  --freemium-host stateless.42crunch.com:443 \
   --token "$TRIAL_TOKEN" \
   --output "$OUTPUT_DIR/report.json" \
   --output-format json \

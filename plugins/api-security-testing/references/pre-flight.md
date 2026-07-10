@@ -97,7 +97,7 @@ fi
 
 *Windows:* `./windows-commands.md` → **Pre-flight — Step 2**.
 
-- **`MODE=token`** → **Token mode**. Use `--freemium-host stateless.42crunch.com:443` and `--token <TRIAL_TOKEN>` in all commands (the token is substituted directly into the `42c-ast` invocation — never echoed on its own). Proceed silently.
+- **`MODE=token`** → **Token mode**. Use `--token <TRIAL_TOKEN>` in all commands (the token is substituted directly into the `42c-ast` invocation — never echoed on its own). Proceed silently.
 - **`MODE=token_limit`** → a previous run already discovered this token plan hit its usage limit (Starter trial ended, or Individual / Individual Pro monthly tokens exhausted). Skip Step 3 onward entirely — follow `./token-limit.md` now, without attempting any `42c-ast` call.
 - **`MODE=platform`** → **Platform mode**. Read `PLATFORM_HOST` separately — it's a URL, not a secret, safe to print in full:
   ```bash
@@ -148,8 +148,7 @@ to the calling skill.
 `--report-sqg` always applied. `--tag <category>:<tagname>` applied only
 when a tag is assigned.
 
-**Token mode**: `--freemium-host stateless.42crunch.com:443` and
-`--token <TRIAL_TOKEN>` for every command. No `--tag` or `--report-sqg`.
+**Token mode**: `--token <TRIAL_TOKEN>` for every command. No `--tag` or `--report-sqg`.
 
 ---
 
