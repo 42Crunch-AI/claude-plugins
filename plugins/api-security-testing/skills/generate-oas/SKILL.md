@@ -6,7 +6,8 @@ description: >
   the user wants to generate, create, or derive an OpenAPI spec,
   reverse-engineer an API definition, document an existing API, or convert a
   Postman/Insomnia collection to OpenAPI — when there is no existing OAS file
-  yet. Triggers on phrases like "generate OAS", "create an OpenAPI spec",
+  yet. After generation from Postman, automatically runs traffic validation
+  when applicable. Triggers on phrases like "generate OAS", "create an OpenAPI spec",
   "generate openapi.json", "document my API", "reverse-engineer spec",
   "convert postman to openapi", "convert insomnia to openapi", "postman
   collection to OAS", "insomnia collection to OAS", or any request to produce
@@ -697,6 +698,46 @@ Before writing, run the self-review checklist and fix any violations found:
 
 ---
 
+## Validate Against Traffic (Post-Generation Guardrail)
+
+Run this section **immediately after** writing the OAS file when a **Postman**
+collection was used as a source. Skip entirely when the only source was
+**codebase** or **Insomnia** (Insomnia is not accepted as `--input` by
+`openapi validate-traffic`; `generate-oas` does not take HAR as a generation
+source — use `/validate-oas-traffic` with a HAR separately if needed).
+
+### When to run
+
+| Sources used in this run | Run validation? | Traffic `--input` |
+|--------------------------|-----------------|-------------------|
+| Postman collection | Yes | Same collection JSON path from Entry Point |
+| Postman + codebase | Yes | Same collection path; set `CODEBASE_WAS_SOURCE=true` |
+| Codebase only | Skip | — |
+| Insomnia only | Skip | — |
+| Codebase + Insomnia | Skip | — |
+
+If Postman was used, also pass `POSTMAN_ENV` when an environment file was
+provided in Entry Point.
+
+### Execution
+
+1. Announce briefly: *"Validating the generated spec against the traffic
+   capture…"*
+2. Read `../../references/validate-traffic-workflow.md` and execute Steps 0–5
+   (report only — **do not** run the remediation loop automatically).
+3. Set `SPEC_PATH` to the file just written, `TRAFFIC_INPUTS` from the table
+   above, and `CODEBASE_WAS_SOURCE` when applicable.
+4. Include the workflow Step 5 summary under a **`Traffic validation:`**
+   subsection in [Report to the User](#report-to-the-user) below.
+5. If blockers exist, add one line to coverage notes suggesting
+   `/validate-oas-traffic` remediation or manual review before audit.
+
+Do not block file delivery on validation failure — always show the generation
+summary; validation is advisory unless the user asks to fix drift in the same
+session.
+
+---
+
 ## Report to the User
 
 After writing the file, output a summary:
@@ -723,6 +764,13 @@ Coverage notes:
   - <any response bodies or schemas that could not be inferred at all —
     emitted as bare additionalProperties: true>
   - <any assumptions made that the user should verify>
+
+Traffic validation:                    ← omit entire subsection if validation was skipped
+  Inputs:     <Postman collection path>
+  Coverage:   <spec paths %> paths · <spec operations %> operations matched
+  Drift:      <blockers> blockers · <warnings> warnings · <informational> informational
+  - <one-line summary of top finding, if any>
+  - <"Run /validate-oas-traffic to review and fix drift" if blockers/warnings exist>
 ```
 
 ---

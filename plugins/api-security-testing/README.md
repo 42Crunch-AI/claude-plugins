@@ -15,6 +15,8 @@ The `42crunch-api-security-testing` plugin is designed for AI-assisted developme
 | [`/42crunch-scan`](./README.md#42crunch-scan) | Live conformance and authorization scan (BOLA/BFLA) against a running API |
 | [`/42crunch-api-security-testing`](./README.md#42crunch-api-security-testing) | Full audit + scan pipeline in a single session |
 | [`/generate-oas`](./README.md#generate-oas) | Generate a complete `openapi.json` from your API source code, a Postman/Insomnia collection, or both |
+| [`/validate-oas-traffic`](./README.md#validate-oas-traffic) | Compare an OpenAPI spec against HAR or Postman traffic to detect drift and possible AI hallucinations |
+| [`/enrich-oas`](./README.md#enrich-oas) | Add request/response examples from HAR or Postman traffic into an existing OpenAPI file |
 
 ## Prerequisites
 
@@ -153,6 +155,12 @@ Generates a complete `openapi.json` from an API codebase, a Postman or Insomnia 
 - **Insomnia collection only** — extracts the same contract details from a v4 (JSON) or v5 (JSON or YAML) export, resolving `{{ variableName }}`/`{{ _.variableName }}` templating. Insomnia exports carry no saved example responses, so response shapes are best-effort placeholders unless a codebase is also provided.
 - **Codebase + collection** — the codebase is treated as the structural source of truth; the collection enriches the result with real example values and surfaces any endpoint the codebase analysis missed.
 
+When generation uses a **Postman collection**, the skill automatically runs
+**traffic validation** after writing the file — comparing the new spec against
+the collection to surface drift and possible hallucinations. Use
+`/validate-oas-traffic` for a standalone check (including HAR) or to apply
+fixes interactively.
+
 Deduplicates schemas into `components/schemas` and performs a self-review pass before writing the file.
 
 Supported frameworks: Express, Fastify, Koa, Hapi, NestJS, FastAPI, Flask, Django, Starlette, Spring Boot, Quarkus, Micronaut, Gin, Echo, Chi, Gorilla/mux, Rails, Sinatra, Grape, ASP.NET Core, and more.
@@ -171,6 +179,65 @@ Claude will prompt for:
 
 ---
 
+### `validate-oas-traffic`
+
+Compares an OpenAPI file against HTTP traffic captured in **HAR** files or
+**Postman** collections using `42c-ast openapi validate-traffic`. Reports
+coverage metrics (how much of the spec was seen in traffic) and structured
+**drift findings** — gaps where the contract declares something traffic never
+showed (`declaredButNotSeen`, useful for catching AI invention) or traffic
+shows something the spec omits (`seenButNotDeclared`).
+
+Does not require 42Crunch platform credentials. Insomnia exports are not
+supported as traffic input.
+
+When testing a pre-release AST build that includes `openapi validate-traffic`
+(and `openapi enrich`), set `AST_VALIDATE_TRAFFIC_BINARY` to the full path of
+that binary.
+
+> **Trigger:** "validate traffic", "validate oas against traffic", "check spec against postman", "traffic drift", "contract vs traffic", "hallucination check", "compare openapi to har"
+
+**Usage:**
+```
+/validate-oas-traffic
+```
+
+Claude will prompt for:
+1. OpenAPI Specification file (if not already known)
+2. HAR and/or Postman collection path(s), and optional Postman environment file
+3. Permission before running the comparison
+4. Optional consent to update the OAS based on drift findings
+
+---
+
+### `enrich-oas`
+
+Adds OpenAPI `examples` to an existing **OpenAPI 3.0.x** file from HTTP traffic
+in **HAR** files or **Postman** collections using `42c-ast openapi enrich`.
+Only fills slots already declared in the spec (responses, requestBody, header
+parameters) — it does not invent new paths, methods, or status codes.
+
+Overwrites the same OpenAPI file after explicit confirmation. Does not require
+42Crunch platform credentials. Insomnia exports are not supported as traffic
+input. Not invoked automatically from `/generate-oas`.
+
+Uses the same pre-release binary resolution as `/validate-oas-traffic`
+(`AST_VALIDATE_TRAFFIC_BINARY`).
+
+> **Trigger:** "enrich oas", "enrich openapi", "quick enrich", "add examples from postman", "add examples from har", "openapi enrich", "fill openapi examples from traffic"
+
+**Usage:**
+```
+/enrich-oas
+```
+
+Claude will prompt for:
+1. OpenAPI Specification file (if not already known)
+2. HAR and/or Postman collection path(s), and optional Postman environment file
+3. Permission before enriching and overwriting the same file
+
+---
+
 ## Configuration
 
 Credentials are read from `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42Crunch\conf\env` (Windows), written by `42crunch-setup`. Never edit this file manually while a skill is running.
@@ -181,6 +248,7 @@ Credentials are read from `~/.42crunch/conf/env` (macOS/Linux) or `%APPDATA%\42C
 | `PLATFORM_HOST` | 42Crunch platform base URL (e.g. `https://us.42crunch.cloud`) | Platform |
 | `TRIAL_TOKEN` | Access token (Base64) for Starter (Free Trial), Individual, or Individual Pro — variable name kept for backward compatibility | Token |
 | `SCAN42C_HOST` | Override scan target URL (overrides `servers[0]` in OAS) | Both |
+| `AST_VALIDATE_TRAFFIC_BINARY` | Full path to a `42c-ast` binary that supports `openapi validate-traffic` and `openapi enrich` (dev/pre-release builds) | validate-oas-traffic, enrich-oas |
 
 Credentials are never printed in plaintext after entry.
 

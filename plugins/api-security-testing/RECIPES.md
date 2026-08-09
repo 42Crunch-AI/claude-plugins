@@ -136,8 +136,10 @@ or
 1. `generate-oas` skill asks whether you have a codebase and/or a Postman or
    Insomnia collection, then writes `openapi.json` from whichever source(s)
    you provide.
-2. `42crunch-audit` skill runs on the generated file
-3. Findings shown and fixes optionally applied
+2. If a Postman collection was used, traffic validation runs automatically
+   and drift findings are included in the generation summary.
+3. `42crunch-audit` skill runs on the generated file
+4. Findings shown and fixes optionally applied
 
 ---
 
@@ -160,6 +162,59 @@ or
 
 ---
 
+## Recipe 8 — Validate OAS Against Traffic
+
+**When to use**: You have an OpenAPI file and a HAR or Postman capture and
+want to check whether the spec matches observed traffic — for example after
+AI-generated documentation or to catch invented endpoints and fields.
+
+**What to say**:
+> "Validate my OpenAPI spec against this Postman collection"
+
+or
+
+> "Check traffic drift on openapi.json using capture.har"
+
+**What happens**:
+1. Resolves the OAS file and traffic input(s)
+2. Runs `42c-ast openapi validate-traffic` (local, no credentials required)
+3. Coverage and drift report with blocker/warning/informational tiers
+4. Optional consent to update the OAS to align with traffic evidence
+5. Suggestion to run `/42crunch-audit` when validation looks clean
+
+**Notes**:
+- Insomnia exports cannot be used as traffic input — use Postman or HAR.
+- For pre-release AST builds, set `AST_VALIDATE_TRAFFIC_BINARY` to the binary path.
+
+---
+
+## Recipe 9 — Enrich OAS From Traffic
+
+**When to use**: You have an OpenAPI 3.0.x file and a HAR or Postman capture
+and want to add real request/response `examples` into slots the spec already
+declares — without inventing new paths or operations.
+
+**What to say**:
+> "Enrich my OpenAPI spec with examples from this Postman collection"
+
+or
+
+> "Quick enrich openapi.json using capture.har"
+
+**What happens**:
+1. Resolves the OAS file and traffic input(s)
+2. Confirms overwrite of the same OpenAPI file
+3. Runs `42c-ast openapi enrich` (local, no credentials required)
+4. Summarizes example counts before/after
+5. Suggests `/validate-oas-traffic` or `/42crunch-audit` as optional follow-ups
+
+**Notes**:
+- Standalone skill — not run automatically from `/generate-oas`.
+- Insomnia exports cannot be used as traffic input — use Postman or HAR.
+- Same pre-release binary env var (`AST_VALIDATE_TRAFFIC_BINARY`) as Recipe 8.
+
+---
+
 ## Choosing the Right Recipe
 
 | Situation | Recipe |
@@ -171,3 +226,5 @@ or
 | Audit + live scan in one session | Recipe 4 |
 | OAS is clean, server is running — scan only | Recipe 5 |
 | No OAS file yet, generate from code and/or Postman/Insomnia first | Recipe 6 |
+| Spec may not match traffic / check for AI hallucinations | Recipe 8 |
+| Add traffic examples into an existing OAS | Recipe 9 |
