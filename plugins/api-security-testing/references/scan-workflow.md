@@ -391,22 +391,67 @@ Call `AskUserQuestion`:
 
 **If OAS has sample data:**
 - **question**: `"Do you have test data to use for testing, or shall I use the samples present in the OAS?"`
-- **options**: `["Use OAS samples", "I have my own test data — I'll provide a Postman collection"]`
+- **options**: `["Use OAS samples", "I have my own test data — I'll provide a Postman collection", "I have my own test data — I'll provide an Insomnia collection"]`
 
 **If OAS has NO sample data:**
 - **question**: `"The OAS doesn't include sample values for request bodies or parameters. Do you have test data available, or will you provide values manually as we go?"`
-- **options**: `["I'll provide a Postman collection", "I'll provide values manually as needed"]`
+- **options**: `["I'll provide a Postman collection", "I'll provide an Insomnia collection", "I'll provide values manually as needed"]`
 
 **If the user selects a Postman collection:**
 1. Call `AskUserQuestion` — **question**: `"Please share the path to your Postman collection file (v2.1 JSON format)."` — wait for the file path.
 2. Parse the Postman v2.1 JSON.
-3. Build a test data lookup table keyed by HTTP method + path pattern:
-   ```
-   { "<METHOD> <path>": { body: {...}, pathVars: {...}, queryParams: {...} } }
-   ```
-4. Announce: `"Loaded test data from Postman collection: <N> request(s) matched."` 
-5. This table is used in Step 5 (classification) and Step 6 (scenario building) to
-   auto-populate Class-C operations — no reactive import needed in Step 8.
+3. Build the test data lookup table (see [Test data lookup table](#test-data-lookup-table) below).
+4. Announce: `"Loaded test data from Postman collection: <N> request(s) matched."`
+
+**If the user selects an Insomnia collection:**
+1. Call `AskUserQuestion` — **question**: `"Please share the path to your Insomnia export file (v4 JSON, or v5 JSON/YAML)."` — wait for the file path. Detect the version from the file itself; don't ask the user for it.
+2. Detect the format and parse:
+   - **v4** — top-level `_type: "export"` + `__export_format: 4`. Walk the flat
+     `resources[]` array: `_type: "request"` entries are requests;
+     `_type: "environment"` entries hold `data: {key: value}` (base
+     environment, then sub-environments overlaid on it).
+   - **v5** — top-level `type: "collection.insomnia.rest/5.0"` (parse as YAML
+     if not valid JSON or the extension is `.yaml`/`.yml`). Walk the nested
+     `collection[]` tree: entries with `children[]` are folders (recurse),
+     entries with `url`/`method` are requests. Environment data comes from
+     the top-level `environments` object (`data` = base, `subEnvironments[]`
+     overlaid on it).
+   - If the export has multiple sub-environments, call `AskUserQuestion` to
+     ask which one to use (options: the sub-environment names).
+3. Resolve Nunjucks references (`{{ var }}` / `{{ _.var }}`) against the merged
+   environment data in URLs, parameters, and bodies. A path segment that is
+   entirely a template reference (e.g. `{{ _.userId }}`) is a path variable —
+   record its resolved value under the variable name (without the `_.`
+   prefix). Leave `{% ... %}` function tags (`{% uuid %}`, `{% timestamp %}`,
+   `{% response %}`, …) unresolved — they are send-time values, not test data.
+   Map `{% uuid %}` → `{{$uuid}}` and `{% timestamp %}` → `{{$timestamp}}`
+   (Step 4 built-ins); treat any other tag (notably `{% response %}`, which
+   signals a dependency chain — see Class-B in Step 5) as having no value.
+4. For each request, extract: query params from `parameters[]` and body from
+   `body` (`application/json` → parse `body.text`;
+   form types → `body.params[]` as name/value pairs). Skip entries with
+   `disabled: true`. Ignore `Authorization` headers and `authentication`
+   blocks — credentials come from Step 2, never from the collection.
+5. Build the test data lookup table (see below).
+6. Announce: `"Loaded test data from Insomnia collection (v<4|5>): <N> request(s) matched."`
+
+### Test data lookup table
+
+Both collection types produce the same table, keyed by HTTP method + OAS path
+pattern (strip the base URL and match the remaining path to the OAS path
+template):
+```
+{ "<METHOD> <path>": { body: {...}, pathVars: {...}, queryParams: {...} } }
+```
+
+This table is used in Step 5 (classification) and Step 6 (scenario building) to
+auto-populate Class-C operations — no reactive import needed in Step 8.
+Everything downstream treats the table identically regardless of whether it
+came from Postman or Insomnia.
+
+Exclude requests that are clearly attack payloads (SQL/NoSQL injection,
+path traversal, or folders/request names indicating exploit scenarios) — they
+are not valid happy-path test data.
 
 If re-seeding is needed after a destructive scan operation (Step 5 Class-D), use
 the seed command captured here. If no seed command was provided and Class-D
@@ -501,7 +546,7 @@ I've classified every API operation into one of four testing modes:
   B — Dependency      Needs a dynamic ID from a prior operation
                       (e.g. create a resource first, then fetch it by ID).
   C — Manual data     Requires values I can't generate automatically —
-                      I'll use your Postman collection or ask you to provide them.
+                      I'll use your Postman/Insomnia collection or ask you to provide them.
   D — Throwaway user  Destroys the currently authenticated account
                       (e.g. DELETE /account) — I'll use a temporary test user
                       to keep your primary session intact.
@@ -538,7 +583,7 @@ Detection heuristic:
 
 **C — User-data-required**
 Inputs cannot be resolved automatically and no plausible creator operation
-exists. If a Postman collection was provided in Step 3, use values from the
+exists. If a Postman or Insomnia collection was provided in Step 3, use values from the
 lookup table. Otherwise ask the user to provide the values directly.
 
 **D — Throwaway-user required**
@@ -688,7 +733,7 @@ starts; see the warning attached to that pattern.
 
 ### Class-C: user-provided data
 
-If a Postman collection was imported in Step 3, look up the operation in
+If a Postman or Insomnia collection was imported in Step 3, look up the operation in
 the test data table and inject the extracted values as static literals in the
 `paths` / `queries` / `requestBody.json` fields of the operation's `request`
 block. If the operation is not in the table, ask the user to paste the values.
@@ -906,7 +951,7 @@ For each operation where the happy path failed, determine the root cause:
 
 | Observed symptom | Root cause | Action |
 |---|---|---|
-| HTTP 400 / 422 with validation error | **Bad sample data** — request body or parameters fail server validation | Use Postman collection lookup table if available; otherwise ask the user to provide valid values |
+| HTTP 400 / 422 with validation error | **Bad sample data** — request body or parameters fail server validation | Use the Step 3 collection lookup table (Postman or Insomnia) if available; otherwise ask the user to provide valid values |
 | HTTP 2xx but conformance FAIL (undocumented fields in response) | **Excessive response data** — server returns fields not in the OAS schema (potential OWASP API3 Excessive Data Exposure) | **Block and call `AskUserQuestion`**: question: `"The response for <operation> includes fields not in your OAS schema: [list fields]. Undocumented fields in responses can expose internal data that clients shouldn't see (OWASP API3). How would you like to handle it?"` options: `["Add these fields to the OAS", "Accept as-is"]`. Do not proceed to the full scan until the user has made an explicit choice for every affected operation. |
 | HTTP 2xx but wrong success code (e.g. got `200`, expected `201`) | **Status code mismatch** — `defaultResponse` in the scan config doesn't match reality | Update `defaultResponse` for that operation |
 | HTTP 404 | **Unresolved path variable** — scenario chain is missing or the `variableAssignment` JSON Pointer is wrong | Inspect the chain; fix the JSON Pointer, or build a missing chain |
@@ -915,11 +960,11 @@ For each operation where the happy path failed, determine the root cause:
 **Group all failures by root cause before asking for any user input.** Present
 the full failure table first, then resolve one root cause type at a time.
 
-### Postman collection fallback
+### Collection fallback
 
 If an operation still fails with HTTP 400/422 after checking the already-loaded
 Step 3 lookup table (or no collection was provided), ask the user to supply
-the values manually. Do not ask for a new Postman collection — if a collection
+the values manually. Do not ask for a new Postman or Insomnia collection — if a collection
 was already imported, re-examine the existing lookup table entries for the
 failing operation before requesting manual input.
 
