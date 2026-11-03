@@ -143,17 +143,30 @@ if (Select-String -Path $EnvFile -Pattern '^TRIAL_TOKEN=' -Quiet -ErrorAction Si
 
 ---
 
-## Step 3 — Resolve the OAS File
+## Step 3 — Resolve the API Definition File
 
-- If the user provided a path → use it.
-- If exactly one OAS file (`.json` or `.yaml` containing `openapi:`) is open
-  in the editor → use it.
-- If **multiple** OAS files are open → call `AskUserQuestion`:
-  - **question**: `"I see multiple OpenAPI files open. Which one should I use?"` — list each filename as an option.
-- If **no** OAS file can be resolved → call `AskUserQuestion`:
-  - **question**: `"I couldn't find an OpenAPI file. Would you like me to generate one from your source code first?"` — options: `["Yes — generate from source code", "No — I'll provide a path"]`
-  - If **Yes** → invoke the `generate-oas` skill, then resume with the generated file.
-  - If **No** → ask the user to provide the file path and wait.
+Resolve **both the file and its type**. Set `API_TYPE` and carry it forward —
+the calling skill selects its workflow file based on it:
+
+| `API_TYPE` | Recognized as |
+|------------|----------------|
+| `oas`      | `.json`/`.yaml`/`.yml` file containing an `openapi` version key |
+| `graphql`  | `.graphql`/`.gql` file, or a file whose content is GraphQL SDL (`type Query`, `schema {`, …) |
+
+- If the user provided a path → use it; classify by content (extension as a
+  fallback).
+- If the user's request names a format explicitly ("audit my GraphQL
+  schema") → restrict resolution to that type.
+- If exactly one candidate file (either type) is open in the editor → use it.
+- If **multiple** candidates are open → call `AskUserQuestion`:
+  - **question**: `"I see multiple API definition files open. Which one should I use?"` — list each filename as an option, suffixing GraphQL schemas with `(GraphQL schema)`.
+- If **no** candidate can be resolved → call `AskUserQuestion`:
+  - **question**: `"I couldn't find an OpenAPI file or GraphQL schema. Would you like me to generate an OpenAPI file from your source code first?"` — options: `["Yes — generate from source code", "No — I'll provide a path"]`
+  - If **Yes** → invoke the `generate-oas` skill, then resume with the generated file (`API_TYPE=oas`).
+  - If **No** → ask the user to provide the file path and wait, then classify it.
+
+**GraphQL support scope**: `API_TYPE=graphql` is supported by both the audit
+and scan phases, including BOLA/BFLA authorization testing.
 
 ---
 

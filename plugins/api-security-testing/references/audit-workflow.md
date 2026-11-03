@@ -52,6 +52,10 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
   --output "${OUTPUT_DIR:-/tmp/42c-audit}/report.json" \
   --output-format json \
   <path-to-oas-file>
+# Token mode: 42c-ast also writes sqg.json, evaluated against the default SQG
+# policy only (tag-based SQGs managed on the platform do not apply). This
+# workflow uses the session target score instead, so remove it. Windows: Remove-Item "$OUTPUT_DIR\sqg.json" -ErrorAction SilentlyContinue
+rm -f "${OUTPUT_DIR:-/tmp/42c-audit}/sqg.json"
 ```
 
 ### Output files (written to the same directory as `--output`)
@@ -60,7 +64,7 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 |---------------|----------------------------------------------------------------------------------------------------|
 | `report.json` | Audit results                                                                                      |
 | `todo.json`   | Same as report.json but with `index[]` for OAS path resolution — **prefer this file**              |
-| `sqg.json`    | SQG result — written in platform mode whenever `--report-sqg` is passed (with or without `--tag`). Not written in token mode. |
+| `sqg.json`    | SQG result — written in platform mode whenever `--report-sqg` is passed (with or without `--tag`). In token mode 42c-ast evaluates only the default SQG policy (no tag-based SQGs); the Token-mode command deletes it because this workflow uses the session target score instead. |
 
 ### Check the run result before proceeding
 
@@ -193,7 +197,7 @@ if issues:
     for issue_id, section, crit, desc, shown, total, truncated in issues:
         print(f"  {issue_id},{section},{crit},{desc},{shown},{total},{truncated}")
 
-# sqg.json (platform mode only — file is absent in token mode)
+# sqg.json (platform mode only — the Token-mode command deletes its default-policy sqg.json)
 if os.path.exists(os.path.join(out, "sqg.json")):
     with open(os.path.join(out, "sqg.json")) as f:
         sqg = json.load(f)
@@ -257,7 +261,7 @@ if ($issues.Count -gt 0) {
     }
 }
 
-# sqg.json (platform mode only — file is absent in token mode)
+# sqg.json (platform mode only — the Token-mode command deletes its default-policy sqg.json)
 if (Test-Path "$OUTPUT_DIR\sqg.json") {
     $sqg = Get-Content "$OUTPUT_DIR\sqg.json" | ConvertFrom-Json
     Write-Host "sqg_acceptance: $($sqg.acceptance)"
