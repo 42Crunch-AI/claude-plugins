@@ -34,7 +34,7 @@ New-Item -ItemType Directory -Force -Path $OUTPUT_DIR | Out-Null
 set -a; . "$HOME/.42crunch/conf/env"; set +a
 <binary> audit run \
   --enrich=false \
-  --output "$OUTPUT_DIR/report.json" \
+  --output "${OUTPUT_DIR:-/tmp/42c-audit}/report.json" \
   --output-format json \
   --report-sqg \
   [--tag <category>:<tagname>] \   # include only when a tag is assigned
@@ -49,7 +49,7 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
   --enrich=false \
   --freemium-host stateless.42crunch.com:443 \
   --token "$TRIAL_TOKEN" \
-  --output "$OUTPUT_DIR/report.json" \
+  --output "${OUTPUT_DIR:-/tmp/42c-audit}/report.json" \
   --output-format json \
   <path-to-oas-file>
 ```
@@ -144,10 +144,13 @@ Extract only the needed fields — do not read the raw file into context.
 **macOS / Linux (Python)**
 
 ```bash
-python3 << 'EOF'
+OUTPUT_DIR="${OUTPUT_DIR:-/tmp/42c-audit}" python3 << 'EOF'
 import json, os, sys
 
-with open("$OUTPUT_DIR/todo.json") as f:
+# The quoted heredoc stops the shell from expanding variables inside the
+# script, so the output directory is passed in through the environment.
+out = os.environ["OUTPUT_DIR"]
+with open(os.path.join(out, "todo.json")) as f:
     d = json.load(f)
 
 state = d["openapiState"]
@@ -191,8 +194,8 @@ if issues:
         print(f"  {issue_id},{section},{crit},{desc},{shown},{total},{truncated}")
 
 # sqg.json (platform mode only — file is absent in token mode)
-if os.path.exists("$OUTPUT_DIR/sqg.json"):
-    with open("$OUTPUT_DIR/sqg.json") as f:
+if os.path.exists(os.path.join(out, "sqg.json")):
+    with open(os.path.join(out, "sqg.json")) as f:
         sqg = json.load(f)
     print(f"sqg_acceptance: {sqg['acceptance']}")
     print(f"sqg_name: {sqg['sqgsDetail'][0]['name']}")
@@ -205,6 +208,7 @@ EOF
 **Windows (PowerShell)**
 
 ```powershell
+if (-not $OUTPUT_DIR) { $OUTPUT_DIR = "$env:TEMP\42c-audit" }
 $d = Get-Content "$OUTPUT_DIR\todo.json" | ConvertFrom-Json
 $state = $d.openapiState
 
