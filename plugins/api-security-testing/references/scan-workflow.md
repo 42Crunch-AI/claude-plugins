@@ -853,15 +853,23 @@ the small status object — `statusCode`, `statusMessage`, `sqgPass`,
 the old single-stream capture that required regex-extracting JSON from a
 1.6MB+ log-contaminated blob.
 
+`scan run` refuses to overwrite an existing `--output` file: it exits with
+`statusCode: 12` and `statusMessage: file_already_exists` and writes nothing.
+Every scan command below therefore deletes the previous report first — keep
+that line when re-running a command (happy-path retries, post-fix
+verification scans).
+
 ```bash
 # macOS / Linux — Platform mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
+rm -f /tmp/42c-happy-report.json
 <binary> scan run --enrich=false \
   --output /tmp/42c-happy-report.json --output-format json \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-happy-status.json
 
 # macOS / Linux — Token mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
+rm -f /tmp/42c-happy-report.json
 <binary> scan run --enrich=false \
   --freemium-host stateless.42crunch.com:443 --token "$TRIAL_TOKEN" \
   --output /tmp/42c-happy-report.json --output-format json \
@@ -871,12 +879,14 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 ```powershell
 # Windows — Platform mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
+Remove-Item "$env:TEMP\42c-happy-report.json" -ErrorAction SilentlyContinue
 & <binary> scan run --enrich=false `
   --output "$env:TEMP\42c-happy-report.json" --output-format json `
   <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-happy-status.json"
 
 # Windows — Token mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
+Remove-Item "$env:TEMP\42c-happy-report.json" -ErrorAction SilentlyContinue
 & <binary> scan run --enrich=false `
   --freemium-host stateless.42crunch.com:443 --token $env:TRIAL_TOKEN `
   --output "$env:TEMP\42c-happy-report.json" --output-format json `
@@ -896,21 +906,35 @@ status = json.load(open("/tmp/42c-happy-status.json"))
 if status.get("statusCode") != 0:
     print(f"scan_error: statusCode={status.get('statusCode')} {status.get('statusMessage','')}")
     raise SystemExit(0)
-# Reconstruct the combined shape from the clean status + report files
-data = {**status, "report": json.load(open("/tmp/42c-happy-report.json"))}
-results = data.get("results", data.get("scanResults", []))
-if isinstance(results, dict):
-    results = [results]
-fails = [
-    (r.get("operationId", r.get("path","?")), t.get("testKey","?"), t.get("httpStatus",""), t.get("reason",""))
-    for r in results
-    for t in r.get("testResults", [])
-    if t.get("status") == "fail" and "happy" in t.get("testKey","").lower()
-]
+report = json.load(open("/tmp/42c-happy-report.json"))
+# Happy-path results live under report.operations[<operationId>].scenarios[].
+# A happy path passed only when outcome.testSuccessful is true. Do not filter
+# on outcome.status here (unlike Step 10): a 2xx response carrying undocumented
+# fields comes back as status "correct" with conformant=false and
+# excessiveDataExposure=true, yet the operation is excluded from fuzzing
+# (reason "operation-happy-path-failed").
+fails = []
+for op_id, op in (report.get("operations") or {}).items():
+    for scenario in op.get("scenarios") or []:
+        outcome = scenario.get("outcome") or {}
+        if outcome.get("testSuccessful") is True:
+            continue
+        expected = sorted(set((scenario.get("happyPath") or {}).get("httpStatusExpected") or []))
+        analysis = outcome.get("apiResponseAnalysis") or []
+        detail = analysis[0].get("responseDescription", "") if analysis else ""
+        detail = detail.split(" : ", 1)[-1].replace(",", ";")[:120]
+        fails.append((
+            op_id,
+            (scenario.get("response") or {}).get("httpStatusCode", ""),
+            "/".join(expected),
+            outcome.get("conformant"),
+            outcome.get("excessiveDataExposure"),
+            detail,
+        ))
 if fails:
-    print(f"happy_path_failures[{len(fails)}]{{operation,test,status,reason}}:")
-    for op, test, code, reason in fails:
-        print(f"  {op},{test},{code},{reason[:60]}")
+    print(f"happy_path_failures[{len(fails)}]{{operation,http_status,expected,conformant,excessive_data,detail}}:")
+    for fail in fails:
+        print("  " + ",".join(str(field) for field in fail))
 else:
     print("happy_path_failures: none")
 EOF
@@ -920,25 +944,30 @@ EOF
 # Windows
 $status = Get-Content "$env:TEMP\42c-happy-status.json" -Raw | ConvertFrom-Json
 if ($status.statusCode -ne 0) { Write-Host "scan_error: statusCode=$($status.statusCode) $($status.statusMessage)"; exit }
-# Reconstruct the combined shape from the clean status + report files
 $report = Get-Content "$env:TEMP\42c-happy-report.json" -Raw | ConvertFrom-Json
-$data = $status | Select-Object *; $data | Add-Member -NotePropertyName report -NotePropertyValue $report -Force
-$results = if ($data.results) { $data.results } elseif ($data.scanResults) { $data.scanResults } else { @() }
-if ($results -is [PSCustomObject]) { $results = @($results) }
+# Happy-path results live under report.operations.<operationId>.scenarios[].
+# Only outcome.testSuccessful marks a pass — see the note in the Python snippet.
 $fails = @()
-foreach ($r in $results) {
-    foreach ($t in $r.testResults) {
-        if ($t.status -eq 'fail' -and $t.testKey -match 'happy') {
-            $op     = if ($r.operationId) { $r.operationId } elseif ($r.path) { $r.path } else { '?' }
-            $test   = if ($t.testKey) { $t.testKey } else { '?' }
-            $code   = if ($t.httpStatus) { $t.httpStatus } else { '' }
-            $reason = if ($t.reason) { $t.reason.Substring(0, [Math]::Min(60, $t.reason.Length)) } else { '' }
-            $fails += "$op,$test,$code,$reason"
+if ($report.operations) {
+    foreach ($p in $report.operations.PSObject.Properties) {
+        foreach ($s in @($p.Value.scenarios)) {
+            if (-not $s) { continue }
+            if ($s.outcome.testSuccessful -eq $true) { continue }
+            $code     = if ($s.response) { $s.response.httpStatusCode } else { '' }
+            $expected = (@($s.happyPath.httpStatusExpected) | Sort-Object -Unique) -join '/'
+            $detail   = ''
+            if ($s.outcome.apiResponseAnalysis) {
+                $detail = [string]@($s.outcome.apiResponseAnalysis)[0].responseDescription
+                if ($detail -match ' : (.*)$') { $detail = $matches[1] }
+                $detail = $detail -replace ',', ';'
+                $detail = $detail.Substring(0, [Math]::Min(120, $detail.Length))
+            }
+            $fails += "$($p.Name),$code,$expected,$($s.outcome.conformant),$($s.outcome.excessiveDataExposure),$detail"
         }
     }
 }
 if ($fails.Count -gt 0) {
-    Write-Host "happy_path_failures[$($fails.Count)]{operation,test,status,reason}:"
+    Write-Host "happy_path_failures[$($fails.Count)]{operation,http_status,expected,conformant,excessive_data,detail}:"
     foreach ($f in $fails) { Write-Host "  $f" }
 } else {
     Write-Host "happy_path_failures: none"
@@ -1032,12 +1061,14 @@ findings.
 ```bash
 # macOS / Linux — Platform mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
+rm -f /tmp/42c-scan-report.json
 <binary> scan run --enrich=false --report-sqg \
   --output /tmp/42c-scan-report.json --output-format json \
   <relative-oas-path> --conf-file <CONF_FILE> > /tmp/42c-scan-status.json
 
 # macOS / Linux — Token mode
 set -a; . "$HOME/.42crunch/conf/env"; set +a
+rm -f /tmp/42c-scan-report.json
 <binary> scan run --enrich=false \
   --freemium-host stateless.42crunch.com:443 --token "$TRIAL_TOKEN" \
   --output /tmp/42c-scan-report.json --output-format json \
@@ -1047,12 +1078,14 @@ set -a; . "$HOME/.42crunch/conf/env"; set +a
 ```powershell
 # Windows — Platform mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
+Remove-Item "$env:TEMP\42c-scan-report.json" -ErrorAction SilentlyContinue
 & <binary> scan run --enrich=false --report-sqg `
   --output "$env:TEMP\42c-scan-report.json" --output-format json `
   <relative-oas-path> --conf-file <CONF_FILE> > "$env:TEMP\42c-scan-status.json"
 
 # Windows — Token mode
 Get-Content "$env:APPDATA\42Crunch\conf\env" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') } }
+Remove-Item "$env:TEMP\42c-scan-report.json" -ErrorAction SilentlyContinue
 & <binary> scan run --enrich=false `
   --freemium-host stateless.42crunch.com:443 --token $env:TRIAL_TOKEN `
   --output "$env:TEMP\42c-scan-report.json" --output-format json `
