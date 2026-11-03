@@ -2,7 +2,8 @@
 
 ## Purpose
 
-Resolve the 42Crunch platform tag associated with the OAS file, then announce
+Resolve the 42Crunch platform tag associated with the API definition file
+(OAS or GraphQL schema), then announce
 the result. Use the resolved tag in audit and scan command flags.
 
 **Token mode**: skip this entire document — tag detection requires platform
@@ -21,11 +22,11 @@ Resolve the tags file path for the current OS:
 | Windows       | `%APPDATA%\42Crunch\conf\tags`         |
 
 If the file exists, parse it as YAML and look for an entry whose key matches
-the **absolute path** of the current OAS file.
+the **absolute path** of the current API definition file.
 
 - **Entry found** → jump directly to **Announce: tag found**. No user-facing
   announcement before this; it is instant.
-- **File missing or no entry for this OAS file** → proceed to Step 2.
+- **File missing or no entry for this file** → proceed to Step 2.
 
 ---
 
@@ -154,7 +155,7 @@ Call `AskUserQuestion`:
 
 1. The `~/.42crunch/conf/` directory already exists (created during setup) —
    no need to create it.
-2. Write or update the tags file. Add or update the entry for this OAS file:
+2. Write or update the tags file. Add or update the entry for this API definition file:
    ```yaml
    <absolute-path-to-oas-file>: <selected_category.name>:<selected_tag.name>
    ```

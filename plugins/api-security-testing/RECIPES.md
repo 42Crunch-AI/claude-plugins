@@ -160,6 +160,84 @@ or
 
 ---
 
+## Recipe 8 — GraphQL Schema Audit
+
+**When to use**: Your API is GraphQL — you want a scored security audit of the
+schema (SDL) with AI-assisted directive fixes.
+
+**What to say**:
+> "Run a 42crunch audit on my GraphQL schema"
+
+or
+
+> "Audit `schema.graphql`"
+
+**What happens**:
+1. Pre-flight checks (binary, credentials, schema file detection)
+2. Permission prompt before the audit runs
+3. GraphQL audit executes and produces a findings report classified into
+   Resource Limiting (query cost, list sizes) and Data Validation (scalar
+   constraints) tiers
+4. Consent gate — you choose whether to apply fixes; fixes annotate the
+   schema with constraint and cost directives (`@stringValue`, `@numberValue`,
+   `@list`, `@cost`) and declare their definitions in the SDL
+5. Re-audit confirms the score improvement / SQG passage
+6. Final summary with score and SQG status
+
+**Notes**:
+- Directives added to the schema are contract metadata — configure your
+  GraphQL engine (cost-analysis / constraint plugins) to enforce them at
+  runtime.
+- To also test the live endpoint, follow with Recipe 9.
+
+---
+
+## Recipe 9 — GraphQL Conformance Scan
+
+**When to use**: Your GraphQL schema is audit-clean and you want to test the
+running endpoint's conformance to the schema contract.
+
+**What to say**:
+> "Run a 42crunch scan on my GraphQL API"
+
+or
+
+> "Scan `schema.graphql` against http://localhost:4000/graphql"
+
+**What happens**:
+1. Pre-flight checks (binary, credentials, schema detection)
+2. Target URL confirmed and reachability probe run
+3. You're asked how the API authenticates (login mutation / bearer token /
+   API-key header / none), plus a second user or an admin when the schema has
+   BOLA/BFLA candidates — a GraphQL schema declares no auth
+4. Operations (queries + mutations) are classified and any dependency chains
+   (e.g. `book(id)` needs `addBook` first) proposed for your confirmation
+5. A happy-path validation run, then the full scan (conformance fuzzing plus
+   BOLA/BFLA tests) after your consent
+6. Authorization findings confirmed against the response data, then findings
+   classified into authorization, SQG-blocking and informational tiers;
+   consent gate before any schema or resolver fixes
+
+**Notes**:
+- Set `SCAN42C_HOST` to override the endpoint URL.
+
+---
+
+## Recipe 10 — GraphQL Audit + Scan
+
+**When to use**: Full pipeline on a GraphQL API — audit the schema, then scan
+the live endpoint, in one session.
+
+**What to say**:
+> "Run the full 42crunch check on my GraphQL API"
+
+**What happens**:
+1. Phase 1 — GraphQL schema audit (Recipe 8)
+2. Phase 2 — GraphQL scan (Recipe 9)
+3. Combined summary across both phases
+
+---
+
 ## Choosing the Right Recipe
 
 | Situation | Recipe |
@@ -171,3 +249,6 @@ or
 | Audit + live scan in one session | Recipe 4 |
 | OAS is clean, server is running — scan only | Recipe 5 |
 | No OAS file yet, generate from code and/or Postman/Insomnia first | Recipe 6 |
+| GraphQL API — audit the schema | Recipe 8 |
+| GraphQL API — scan the live endpoint | Recipe 9 |
+| GraphQL API — audit + scan in one session | Recipe 10 |
