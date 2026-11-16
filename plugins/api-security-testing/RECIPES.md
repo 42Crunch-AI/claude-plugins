@@ -115,7 +115,43 @@ or
 
 ---
 
-## Recipe 6 — Generate OAS, Then Audit
+## Recipe 6 — Fix-Only Scan (Existing Report)
+
+**When to use**: You already have a scan report (`scan-report.json`) from a
+previous run and want to skip re-running the scan and go straight to applying
+the fixes it requires.
+
+**What to say**:
+> "Fix the scan issues in `scan-report.json` for `openapi.json`"
+
+or
+
+> "I have an existing scan report at `<path-to-report>`. Apply the fixes to
+> `<path-to-oas-file>` without re-running the scan."
+
+**What happens**:
+1. Pre-flight checks (binary, credentials, OAS file detection)
+2. Scan config, reachability probe and scan run are **skipped** — the skill
+   reads your existing report file
+3. Findings are parsed and displayed as a risk-classified report
+   (Authorization failures / SQG-blocking conformance / informational conformance)
+4. Consent gate — you choose which fixes to apply
+5. Fixes are applied to the OAS file and, where needed (e.g. BOLA/BFLA),
+   to the server-side code
+6. Final summary (no before/after comparison since no fresh scan was run)
+
+**Notes**:
+- The report file must be in `json` format produced by `42c-ast scan run`
+  (`--output-format json`) or by the 42Crunch extension scan function and
+  exported to JSON format.
+- The report must match the current OAS file — if the spec has changed since
+  the scan ran, some findings may no longer map to the right operations.
+- After fixes are applied (and the API restarted, if code changed) you may
+  want to run a fresh scan (Recipe 5) to confirm SQG now passes.
+
+---
+
+## Recipe 7 — Generate OAS, Then Audit
 
 **When to use**: You don't have an OAS file yet — you want to generate one
 from your API source code, a Postman or Insomnia collection, or both, and
@@ -141,7 +177,7 @@ or
 
 ---
 
-## Recipe 7 — Setup Only
+## Recipe 8 — Setup Only
 
 **When to use**: First-time setup — you need to install the `42c-ast` binary
 and configure credentials before running any audit or scan.
@@ -160,7 +196,7 @@ or
 
 ---
 
-## Recipe 8 — GraphQL Schema Audit
+## Recipe 9 — GraphQL Schema Audit
 
 **When to use**: Your API is GraphQL — you want a scored security audit of the
 schema (SDL) with AI-assisted directive fixes.
@@ -188,11 +224,11 @@ or
 - Directives added to the schema are contract metadata — configure your
   GraphQL engine (cost-analysis / constraint plugins) to enforce them at
   runtime.
-- To also test the live endpoint, follow with Recipe 9.
+- To also test the live endpoint, follow with Recipe 10.
 
 ---
 
-## Recipe 9 — GraphQL Conformance Scan
+## Recipe 10 — GraphQL Conformance Scan
 
 **When to use**: Your GraphQL schema is audit-clean and you want to test the
 running endpoint's conformance to the schema contract.
@@ -223,7 +259,7 @@ or
 
 ---
 
-## Recipe 10 — GraphQL Audit + Scan
+## Recipe 11 — GraphQL Audit + Scan
 
 **When to use**: Full pipeline on a GraphQL API — audit the schema, then scan
 the live endpoint, in one session.
@@ -232,8 +268,8 @@ the live endpoint, in one session.
 > "Run the full 42crunch check on my GraphQL API"
 
 **What happens**:
-1. Phase 1 — GraphQL schema audit (Recipe 8)
-2. Phase 2 — GraphQL scan (Recipe 9)
+1. Phase 1 — GraphQL schema audit (Recipe 9)
+2. Phase 2 — GraphQL scan (Recipe 10)
 3. Combined summary across both phases
 
 ---
@@ -242,13 +278,14 @@ the live endpoint, in one session.
 
 | Situation | Recipe |
 |-----------|--------|
-| First time using 42Crunch | Recipe 7 (Setup), then Recipe 1 |
+| First time using 42Crunch | Recipe 8 (Setup), then Recipe 1 |
 | Audit a new or changed OAS file | Recipe 1 |
 | Already have an audit report, just want fixes | Recipe 2 |
 | Review findings with your team before fixing | Recipe 3 |
 | Audit + live scan in one session | Recipe 4 |
 | OAS is clean, server is running — scan only | Recipe 5 |
-| No OAS file yet, generate from code and/or Postman/Insomnia first | Recipe 6 |
-| GraphQL API — audit the schema | Recipe 8 |
-| GraphQL API — scan the live endpoint | Recipe 9 |
-| GraphQL API — audit + scan in one session | Recipe 10 |
+| Already have a scan report, just want fixes | Recipe 6 |
+| No OAS file yet, generate from code and/or Postman/Insomnia first | Recipe 7 |
+| GraphQL API — audit the schema | Recipe 9 |
+| GraphQL API — scan the live endpoint | Recipe 10 |
+| GraphQL API — audit + scan in one session | Recipe 11 |
