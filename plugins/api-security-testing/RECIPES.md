@@ -130,7 +130,7 @@ or
 > `<path-to-oas-file>` without re-running the scan."
 
 **What happens**:
-1. Pre-flight checks (binary, credentials, OAS file detection)
+1. OAS file detection
 2. Scan config, reachability probe and scan run are **skipped** — the skill
    reads your existing report file
 3. Findings are parsed and displayed as a risk-classified report
